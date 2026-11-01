@@ -182,13 +182,14 @@ public class QrScanServlet extends HttpServlet {
                 return;
             }
 
-            // Replay & Rotation Leeway Check for Full Signed Token:
-            // Accepts the active token or any server-signed token within the cryptographic validity window.
-            // Duplicate scans by the same student are strictly blocked per-session below.
-            boolean isCurrentActive = token.equals(session.getSessionToken()) || validation.isValid();
+            // Replay & Rotation Check for Full Signed Token:
+            // The token must match the currently active rotation token on screen.
+            // Multiple enrolled students can scan the active token within its window,
+            // while duplicate scans by the same student are strictly blocked per-session below.
+            boolean isCurrentActive = token.equals(session.getSessionToken());
             if (!isCurrentActive) {
                 scanAttemptDao.recordAttempt(session.getId(), student.getStudentId(), tokenHash, "REPLAYED");
-                handleResult(request, response, isJson, false, "Token has already rotated or expired. Please scan the current code on screen.");
+                handleResult(request, response, isJson, false, "Token has already rotated or been replayed. Please scan the current code on screen.");
                 return;
             }
         }

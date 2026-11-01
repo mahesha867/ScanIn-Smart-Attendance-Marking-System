@@ -28,7 +28,7 @@
         <div class="nav-actions">
             <span class="user-badge" style="background: rgba(88, 44, 131, 0.1); color: var(--color-purple); border: 1px solid rgba(88, 44, 131, 0.25);">
                 <span class="radar-dot"></span>
-                <span>Active 15s Rotation</span>
+                <span>Active 7s Rotation</span>
             </span>
             <form action="${pageContext.request.contextPath}/qr/close" method="GET" style="display:inline; margin:0;">
                 <input type="hidden" name="sessionId" value="<%= sessionId %>">
@@ -47,13 +47,13 @@
                     <%= course != null ? course.getCourseCode() : "" %> &bull; <%= course != null ? course.getCourseName() : "" %>
                 </span>
                 <h1 class="page-title" style="margin-top: 0.85rem; font-size: 2rem; color: #0f172a;">Dynamic Attendance QR</h1>
-                <p class="page-subtitle" style="color: #64748b;">Cryptographically server-signed tokens rotate every 15 seconds</p>
+                <p class="page-subtitle" style="color: #64748b;">Cryptographically server-signed tokens rotate every 7 seconds</p>
             </div>
 
-            <!-- 15-Second Countdown Timer -->
+            <!-- 7-Second Countdown Timer -->
             <div style="display: flex; align-items: center; justify-content: center; gap: 0.75rem; margin-bottom: 1.25rem;">
                 <span style="font-size: 0.95rem; font-weight: 600; color: #475569;">Token rotates in:</span>
-                <div id="qr-timer" class="timer-badge safe" style="font-size: 1.1rem; font-weight: 800; min-width: 52px; padding: 0.35rem 0.85rem; border-radius: 20px;">15s</div>
+                <div id="qr-timer" class="timer-badge safe" style="font-size: 1.1rem; font-weight: 800; min-width: 52px; padding: 0.35rem 0.85rem; border-radius: 20px;">7s</div>
             </div>
 
             <!-- Dynamic QR Code Display -->
@@ -91,7 +91,7 @@
     </main>
 
     <footer class="footer" style="text-align: center; padding: 1.5rem 0; color: #94a3b8; font-size: 0.85rem;">
-        <p>ScanIn &bull; Dynamic HMAC-SHA256 Token Rotates Every 15 Seconds &bull; Powered by Tomcat & MySQL</p>
+        <p>ScanIn &bull; Dynamic HMAC-SHA256 Token Rotates Every 7 Seconds &bull; Powered by Tomcat & MySQL</p>
     </footer>
 
     <script src="${pageContext.request.contextPath}/js/qr-scanner.js"></script>

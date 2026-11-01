@@ -435,8 +435,9 @@ All 7 test suites were executed back-to-back against the running system:
 | [`Stage6VerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage6VerificationTest.java) | 5s HMAC Token Rotation, Multi-Student Active QR, Expired/Replay/Duplicate Rejection, Auto-Close, Concurrent Scans | 11 / 11 | ✅ PASS |
 | [`Stage7VerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage7VerificationTest.java) | Session Reopen/Reclose, Reasoned Manual Overrides, Append-Only Audit Trail, CSV Export, 6-Digit Code | 8 / 8 | ✅ PASS |
 | [`Stage8VerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage8VerificationTest.java) | Session-Bound 6-Digit Code, Database-Backed Rate Limiting, Formula Uniformity, Full Regression | 5 / 5 | ✅ PASS |
-| [`ClassMeetingAttendanceVerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/ClassMeetingAttendanceVerificationTest.java) | Persistent Class Meeting Sessions, Ephemeral 5s QR Tokens, UTC Timezone, Reopen Idempotency, Reporting Invariance, Merged Session Exclusion | 10 / 10 | ✅ PASS |
-| **Total Automated Tests** | **Comprehensive System Lifecycle, Security & Meeting Attendance Coverage (7+7+7+7+11+8+5+10)** | **62 / 62** | **✅ 100% PASS** |
+| [`ClassMeetingAttendanceVerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/ClassMeetingAttendanceVerificationTest.java) | Persistent Class Meeting Sessions, Ephemeral 7s QR Tokens, UTC Timezone, Reopen Idempotency, Reporting Invariance, Merged Session Exclusion | 10 / 10 | ✅ PASS |
+| [`QrTimingVerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/QrTimingVerificationTest.java) | 7-Second QR Rotation, 10s Token Validity, Security Regressions, Lifecycle Invariance | 20 / 20 | ✅ PASS |
+| **Total Automated Tests** | **Comprehensive System Lifecycle, Security & Meeting Attendance Coverage (7+7+7+7+11+8+5+10+20)** | **82 / 82** | **✅ 100% PASS** |
 
 ---
 
@@ -472,6 +473,76 @@ All 7 test suites were executed back-to-back against the running system:
 6. **Class Meeting Verification Test Evidence ([`ClassMeetingAttendanceVerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/ClassMeetingAttendanceVerificationTest.java)):**
    - 10 test cases covering 10+ consecutive QR rotations, multi-student concurrent scanning on same token, multi-rotation single record invariant, single absentee reconciliation, reclose idempotency, reopen preservation, 1-row-per-meeting reporting and CSV query, meeting-based percentage calculation, scheduled end closure, and Course 21 migration invariance / merged session exclusion.
    - **Result:** 10 / 10 Passed (100%).
+
+---
+
+## Stage 10: Dynamic QR Token Timing Optimization (7-Second Cryptographic Rotation & Client Polling Guard)
+
+### Scope and Architectural Objectives
+- Optimizes ephemeral dynamic QR token rotation from 15 seconds to **exactly 7 seconds**.
+- Configures token validity window to **10 seconds** (7-second on-screen rotation + 3-second network transmission leeway), preventing stale token acceptance while ensuring reliable student check-in.
+- Synchronizes the 6-digit numeric fallback code with the 7-second dynamic QR token rotation.
+- Adds an asynchronous polling overlap guard (`isFetching`) in the client-side JavaScript refresher with automatic error recovery to prevent stale countdowns or frozen timers.
+- Preserves Stage 9 persistent meeting sessions (60-minute duration), absentee reconciliation, audit logging, role permissions, and database integrity without touching database schema or migration scripts.
+
+### Detailed Modifications & Constants Updated
+
+| Component / File | Modified Element | Old Value | New Value | Operational Impact |
+|---|---|---|---|---|
+| [`QrCodeUtil.java`](file:///c:/java_dbms_project/src/main/java/com/attendance/util/QrCodeUtil.java) | `ROTATION_INTERVAL_SECONDS` | `15` | `7` | Sets server QR rotation interval & TOTP step: `timestamp / (7 * 1000L)`. |
+| [`QrCodeUtil.java`](file:///c:/java_dbms_project/src/main/java/com/attendance/util/QrCodeUtil.java) | `VALIDITY_WINDOW_MS` | `20000L` | `10000L` | 7s rotation + 3s network leeway window for constant-time HMAC validation. |
+| [`QrCodeUtil.java`](file:///c:/java_dbms_project/src/main/java/com/attendance/util/QrCodeUtil.java) | `generateExpiredToken(...)` | `now - 30000L` | `now - 20000L` | Guaranteed token expiry beyond the 10s validity window for testing. |
+| [`QrScanServlet.java`](file:///c:/java_dbms_project/src/main/java/com/attendance/servlet/QrScanServlet.java) | `isCurrentActive` Check | Lenient validity window check | Exact active token match (`token.equals(session.getSessionToken())`) | Strictly rejects replayed rotated tokens with `REPLAYED` while active token remains scannable by all enrolled students. |
+| [`QrGenerateServlet.java`](file:///c:/java_dbms_project/src/main/java/com/attendance/servlet/QrGenerateServlet.java) | Branch A Polling & Comments | 5s / 15s references | 7s references | Emits `"expiresInSeconds": 7` dynamically to the client poll endpoint `/qr/active`. |
+| [`qr-display.jsp`](file:///c:/java_dbms_project/src/main/webapp/WEB-INF/views/qr-display.jsp) | Timer & Status UI | `15s` / `Active 15s Rotation` | `7s` / `Active 7s Rotation` | Instructor display countdown badge, header badge, subtitle, and footer text. |
+| [`qr-scanner.js`](file:///c:/java_dbms_project/src/main/webapp/js/qr-scanner.js) | Client Timer & Polling Refresher | `timeLeft = 15;` | `ROTATION_INTERVAL = 7;`, `timeLeft = 7;`, `isFetching` guard | Manages 7s countdown, alert pulse at `timeLeft <= 2`, guards against overlapping in-flight polls, and recovers on network failure. |
+
+### Verification Test Suite ([`QrTimingVerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/QrTimingVerificationTest.java))
+
+Executed against live Tomcat 10 on port 8080 and MySQL 8.0 on port 3306 (UTC timezone):
+
+| # | Test Target / Case | Verification Method | Result |
+|---|---|---|---|
+| **1** | Configured QR rotation interval is exactly 7s | Validates `QrCodeUtil.ROTATION_INTERVAL_SECONDS == 7`, `VALIDITY_WINDOW_MS == 10000L`, and `/qr/active` JSON payload returns `"expiresInSeconds":7`. | ✅ PASS |
+| **2** | Newly generated token valid within window | Validates token at $T=0$, $T=5\text{s}$, and $T=8\text{s}$ (within 10s leeway window) returns `TokenStatus.VALID`. | ✅ PASS |
+| **3** | Token beyond configured expiration (10s) rejected | Validates token at $T=11\text{s}$ and `generateExpiredToken()` returns `TokenStatus.EXPIRED`. | ✅ PASS |
+| **4** | QR display countdown starts at 7s & resets | Verifies initial rendered HTML contains `7s` badge and `qr-scanner.js` defines `ROTATION_INTERVAL = 7` with `isFetching` guard. | ✅ PASS |
+| **5** | 6-digit fallback rotates synchronously | Verifies dynamic truncation produces valid 6-digit codes and rotates synchronously every 7 seconds. | ✅ PASS |
+| **6** | Tampered HMAC signatures rejected | Bit-flipped HMAC signature rejected with `INVALID` outcome in `scan_attempts`. | ✅ PASS |
+| **7** | Tokens from another course rejected | Token generated for Course A submitted against Course B session rejected with `WRONG_COURSE`. | ✅ PASS |
+| **8** | Tokens from another meeting rejected | Token generated for non-existent session rejected with 0 records persisted. | ✅ PASS |
+| **9** | Expired tokens rejected by `/qr/scan` | Submitting expired token returns `success: false` and logs `EXPIRED` in `scan_attempts`. | ✅ PASS |
+| **10** | Replayed tokens rejected per replay policy | Submitting previously rotated token rejected with `REPLAYED` in `scan_attempts`. | ✅ PASS |
+| **11** | Duplicate scans do not duplicate attendance | Second scan by same student reports *"already marked"*, preserving exactly 1 attendance row. | ✅ PASS |
+| **12** | Unenrolled students cannot record attendance | Student not enrolled in course rejected with *"not enrolled"* and `WRONG_COURSE`. | ✅ PASS |
+| **13** | Closed meeting sessions reject scans | Scan on closed meeting session rejected with `CLOSED_SESSION`. | ✅ PASS |
+| **14** | Rate limiting functional on rapid guessing | 5 failed attempts in 60s trigger `RATE_LIMITED` blocking on 6th attempt. | ✅ PASS |
+| **15** | Rotation creates no additional meeting rows | 10 consecutive `/qr/active` polls maintain exactly 1 row in `qr_sessions`. | ✅ PASS |
+| **16** | Rotation does not close meeting | Polling leaves meeting `is_active = TRUE` and `closed_at = NULL`. | ✅ PASS |
+| **17** | Rotation does not trigger absentee reconciliation | Polling with un-scanned students leaves attendance count at 0. | ✅ PASS |
+| **18** | Manual closure marks absentees | Explicit closure (`/qr/close`) reconciles unmarked enrolled students to `ABSENT`. | ✅ PASS |
+| **19** | Reopening preserves meeting ID | Reopened session preserves exact primary key meeting ID with `is_active = TRUE`. | ✅ PASS |
+| **20** | Reclosing idempotent & preserves manual decisions | Reclosing preserves `PRESENT` and manual `OD` overrides without duplicate rows. | ✅ PASS |
+
+**Result:** **20 / 20 Tests Passed (100%)**.
+
+---
+
+### Grand Total Regression Summary (All Suites)
+
+```
+Stage 2 Verification (Pooled DataSource, Constraints, Security):    7 / 7   PASS
+Stage 3 Verification (BCrypt, Legacy Migration, RBAC 403):           7 / 7   PASS
+Stage 4 Verification (Student Academics, Registration, Warning):     7 / 7   PASS
+Stage 5 Verification (Faculty Course CRUD, Rosters, Schedules):       7 / 7   PASS
+Stage 6 Verification (HMAC Token Rotation, Multi-Student Scans):    11 / 11  PASS
+Stage 7 Verification (Session Lifecycle, Audit Trail, CSV Export):   8 / 8   PASS
+Stage 8 Verification (Session-Bound 6-Digit Code, Rate Limiting):    5 / 5   PASS
+Class Meeting Verification (Persistent Meetings, UTC Timezone):     10 / 10  PASS
+QR Timing Verification (7s Rotation, 10s Validity, Security):       20 / 20  PASS
+---------------------------------------------------------------------------------
+TOTAL AUTOMATED TESTS:                                              82 / 82  PASS (100%)
+```
 
 
 

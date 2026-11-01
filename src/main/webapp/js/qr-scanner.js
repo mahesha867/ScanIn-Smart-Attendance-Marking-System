@@ -2,9 +2,11 @@
  * ScanIn - Dynamic QR Generator & Scanner JS
  */
 
-// ── Dynamic QR Session Live 15-Second Auto-Refresher (Teacher Screen) ──
+// ── Dynamic QR Session Live 7-Second Auto-Refresher (Teacher Screen) ──
 function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNumericCode, contextPath) {
-    let timeLeft = 15;
+    const ROTATION_INTERVAL = 7;
+    let timeLeft = ROTATION_INTERVAL;
+    let isFetching = false;
     const timerElem = document.getElementById("qr-timer");
     const qrImg = document.getElementById("qr-image");
     const tokenDisplay = document.getElementById("token-display");
@@ -34,7 +36,7 @@ function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNum
         timeLeft--;
         if (timerElem) {
             timerElem.innerText = timeLeft + "s";
-            if (timeLeft <= 4) {
+            if (timeLeft <= 2) {
                 timerElem.className = "timer-badge"; // alert pulse
                 timerElem.style.background = "#fee2e2";
                 timerElem.style.color = "#dc2626";
@@ -45,15 +47,21 @@ function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNum
             }
         }
 
-        // When countdown reaches 0, fetch fresh server-signed token via 15s rotation AJAX
+        // When countdown reaches 0, fetch fresh server-signed token via 7s rotation AJAX
         if (timeLeft <= 0) {
-            timeLeft = 15;
+            if (isFetching) {
+                // Prevent overlapping requests if a poll is already in flight
+                return;
+            }
+            isFetching = true;
+            timeLeft = ROTATION_INTERVAL; // Immediately reset countdown so it never stalls at 0
+
             try {
                 const response = await fetch(activeUrl);
                 if (response.ok) {
                     const data = await response.json();
                     if (data.status === "ok") {
-                        timeLeft = data.expiresInSeconds || 15;
+                        timeLeft = data.expiresInSeconds || ROTATION_INTERVAL;
                         renderQr(data.token, data.scanUrl, data.numericCode);
                         if (countDisplay && data.markedCount !== undefined) {
                             countDisplay.innerText = data.markedCount;
@@ -67,9 +75,16 @@ function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNum
                             timerElem.style.color = "#dc2626";
                         }
                     }
+                } else {
+                    // Non-OK response: preserve active timer countdown for next attempt
+                    timeLeft = ROTATION_INTERVAL;
                 }
             } catch (err) {
-                console.error("Failed to rotate 15s QR token:", err);
+                console.error("Failed to rotate 7s QR token:", err);
+                // Recover timer so countdown does not freeze on network error
+                timeLeft = ROTATION_INTERVAL;
+            } finally {
+                isFetching = false;
             }
         }
     }, 1000);

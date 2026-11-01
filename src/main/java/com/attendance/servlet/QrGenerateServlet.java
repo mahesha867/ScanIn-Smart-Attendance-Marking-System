@@ -154,7 +154,7 @@ public class QrGenerateServlet extends HttpServlet {
             return;
         }
 
-        // 3. Branch A: Ephemeral 5-Second QR Token Polling (/qr/active)
+        // 3. Branch A: Ephemeral 7-Second QR Token Polling (/qr/active)
         // CRITICAL ARCHITECTURAL GUARANTEE:
         // Polling MUST NEVER create a class meeting session, MUST NEVER auto-close an active meeting,
         // and MUST NEVER run absentee reconciliation. It only rotates the ephemeral token for an active meeting.
@@ -170,7 +170,7 @@ public class QrGenerateServlet extends HttpServlet {
             }
 
             QrSession session = activeOpt.get();
-            // Refresh ephemeral 5-second rotating cryptographic token and 6-digit numeric fallback
+            // Refresh ephemeral 7-second rotating cryptographic token and 6-digit numeric fallback
             long now = System.currentTimeMillis();
             String token = QrCodeUtil.generateSignedTokenWithTimestamp(session.getId(), courseId, now);
             String numericCode = QrCodeUtil.computeNumericCode(session.getId(), courseId, now);

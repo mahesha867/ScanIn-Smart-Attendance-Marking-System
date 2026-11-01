@@ -10,8 +10,8 @@ import java.util.UUID;
  * Utility for Cryptographically Server-Signed Dynamic QR Code Tokens.
  * Features:
  * - HMAC-SHA256 token signing with server-side secret key.
- * - 5-second dynamic QR code rotation.
- * - Leeway validity window (7 seconds) to account for network transmission latency.
+ * - 7-second dynamic QR code rotation.
+ * - Leeway validity window (10 seconds: 7s display + 3s network transmission leeway).
  * - Strict constant-time cryptographic verification preventing timing attacks.
  * - Typed fallback code validation supporting the exact same signed token.
  */
@@ -20,11 +20,11 @@ public class QrCodeUtil {
     private static final String HMAC_ALGO = "HmacSHA256";
     private static final String SECRET_KEY = "ScanIn#PurpleCollegiateAttendanceHMAC2026";
 
-    // Dynamic rotation interval on screen: 15 seconds
-    public static final int ROTATION_INTERVAL_SECONDS = 15;
+    // Dynamic rotation interval on screen: 7 seconds
+    public static final int ROTATION_INTERVAL_SECONDS = 7;
 
-    // Validity window: 20 seconds (15 seconds display + 5 seconds network transmission leeway)
-    public static final long VALIDITY_WINDOW_MS = 20000L;
+    // Validity window: 10 seconds (7 seconds display + 3 seconds network transmission leeway)
+    public static final long VALIDITY_WINDOW_MS = 10000L;
 
     /**
      * Generates a cryptographically server-signed, short-lived token for an active QR session.
@@ -36,7 +36,7 @@ public class QrCodeUtil {
 
     /**
      * Derives a short 6-digit numeric fallback code from (sessionId, courseId, timestamp).
-     * Rotates synchronously with the dynamic QR code every 5 seconds.
+     * Rotates synchronously with the dynamic QR code every 7 seconds.
      */
     public static String computeNumericCode(int sessionId, int courseId, long timestamp) {
         long step = timestamp / (ROTATION_INTERVAL_SECONDS * 1000L);
@@ -68,8 +68,8 @@ public class QrCodeUtil {
      * Generates an intentionally expired signed token for automated testing.
      */
     public static String generateExpiredToken(int sessionId, int courseId) {
-        // Timestamp 30 seconds in the past
-        return generateSignedTokenWithTimestamp(sessionId, courseId, System.currentTimeMillis() - 30000L);
+        // Timestamp 20 seconds in the past (beyond 10s validity window)
+        return generateSignedTokenWithTimestamp(sessionId, courseId, System.currentTimeMillis() - 20000L);
     }
 
     /**
@@ -184,7 +184,7 @@ public class QrCodeUtil {
                 return new TokenValidation(TokenStatus.INVALID, sessionId, courseId, timestamp, nonce, "Token timestamp is in the future");
             }
 
-            // Reject expired tokens beyond the 7s validity window
+            // Reject expired tokens beyond the 10s validity window
             if (age > VALIDITY_WINDOW_MS) {
                 return new TokenValidation(TokenStatus.EXPIRED, sessionId, courseId, timestamp, nonce, "QR code / token has expired");
             }
