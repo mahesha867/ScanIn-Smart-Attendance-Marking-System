@@ -23,3 +23,14 @@ tomcat/webapps/attendance/
 .DS_Store
 Thumbs.db
 
+# Build output and staging directories
+build/
+
+# Packaged distribution artifacts and release candidates
+dist/*.war
+dist/backups/
+
+# Tomcat deployed WARs and deployment-specific backups
+tomcat/webapps/*.war
+tomcat/webapps/*.war.bak_*
+
