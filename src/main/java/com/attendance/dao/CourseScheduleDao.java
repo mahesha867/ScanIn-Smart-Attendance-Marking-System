@@ -45,7 +45,7 @@ public class CourseScheduleDao {
                      "JOIN enrollments e ON c.id = e.course_id " +
                      "JOIN teachers t ON c.teacher_id = t.teacher_id " +
                      "JOIN users u ON t.user_id = u.id " +
-                     "WHERE e.student_id = ? " +
+                     "WHERE e.student_id = ? AND (e.status = 'ACTIVE' OR e.status IS NULL) " +
                      "ORDER BY FIELD(cs.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), cs.start_time ASC";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {

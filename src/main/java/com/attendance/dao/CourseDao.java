@@ -100,7 +100,7 @@ public class CourseDao implements Dao<Course> {
     }
 
     public boolean isStudentEnrolled(int studentId, int courseId) {
-        String sql = "SELECT 1 FROM enrollments WHERE student_id = ? AND course_id = ?";
+        String sql = "SELECT 1 FROM enrollments WHERE student_id = ? AND course_id = ? AND (status = 'ACTIVE' OR status IS NULL)";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, studentId);
@@ -116,17 +116,37 @@ public class CourseDao implements Dao<Course> {
 
     /**
      * Enrolls a student in a course, enforcing uniqueness to prevent duplicate registrations.
+     * Preserves historical enrollment lifecycle by reactivating previously dropped records.
      */
     public boolean enrollStudent(int studentId, int courseId) {
-        if (isStudentEnrolled(studentId, courseId)) {
-            return false; // Prevent duplicate registration
-        }
-        String sql = "INSERT INTO enrollments (student_id, course_id) VALUES (?, ?)";
+        String checkSql = "SELECT status FROM enrollments WHERE student_id = ? AND course_id = ?";
         try (Connection conn = DBConnection.getInstance().getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, studentId);
-            ps.setInt(2, courseId);
-            return ps.executeUpdate() > 0;
+             PreparedStatement psCheck = conn.prepareStatement(checkSql)) {
+            psCheck.setInt(1, studentId);
+            psCheck.setInt(2, courseId);
+            try (ResultSet rs = psCheck.executeQuery()) {
+                if (rs.next()) {
+                    String status = rs.getString("status");
+                    if (status == null || "ACTIVE".equalsIgnoreCase(status)) {
+                        return false; // Prevent duplicate active registration
+                    }
+                    // Reactivate dropped enrollment record while preserving original history
+                    String updateSql = "UPDATE enrollments SET status = 'ACTIVE', dropped_at = NULL, enrolled_at = CURRENT_TIMESTAMP WHERE student_id = ? AND course_id = ?";
+                    try (PreparedStatement psUpdate = conn.prepareStatement(updateSql)) {
+                        psUpdate.setInt(1, studentId);
+                        psUpdate.setInt(2, courseId);
+                        return psUpdate.executeUpdate() > 0;
+                    }
+                }
+            }
+
+            // Fresh enrollment
+            String sql = "INSERT INTO enrollments (student_id, course_id, status, enrolled_at) VALUES (?, ?, 'ACTIVE', CURRENT_TIMESTAMP)";
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, studentId);
+                ps.setInt(2, courseId);
+                return ps.executeUpdate() > 0;
+            }
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -134,10 +154,10 @@ public class CourseDao implements Dao<Course> {
     }
 
     /**
-     * Drops a student's enrollment from a course.
+     * Soft-drops a student's enrollment from a course to preserve historical attendance association.
      */
     public boolean dropStudent(int studentId, int courseId) {
-        String sql = "DELETE FROM enrollments WHERE student_id = ? AND course_id = ?";
+        String sql = "UPDATE enrollments SET status = 'DROPPED', dropped_at = CURRENT_TIMESTAMP WHERE student_id = ? AND course_id = ? AND (status = 'ACTIVE' OR status IS NULL)";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, studentId);
@@ -158,7 +178,7 @@ public class CourseDao implements Dao<Course> {
                      "FROM courses c " +
                      "JOIN teachers t ON c.teacher_id = t.teacher_id " +
                      "JOIN users u ON t.user_id = u.id " +
-                     "WHERE c.id NOT IN (SELECT course_id FROM enrollments WHERE student_id = ?) " +
+                     "WHERE c.id NOT IN (SELECT course_id FROM enrollments WHERE student_id = ? AND (status = 'ACTIVE' OR status IS NULL)) " +
                      "ORDER BY c.course_code ASC";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {

@@ -92,7 +92,7 @@ public class QrSessionDao implements Dao<QrSession> {
                      "JOIN teachers t ON qs.teacher_id = t.teacher_id " +
                      "JOIN users u ON t.user_id = u.id " +
                      "JOIN enrollments e ON qs.course_id = e.course_id " +
-                     "WHERE e.student_id = ? AND qs.is_active = TRUE AND qs.closed_at IS NULL " +
+                     "WHERE e.student_id = ? AND (e.status = 'ACTIVE' OR e.status IS NULL) AND qs.is_active = TRUE AND qs.closed_at IS NULL " +
                      "ORDER BY qs.id DESC";
         long now = System.currentTimeMillis();
         try (Connection conn = DBConnection.getInstance().getConnection();
@@ -115,6 +115,101 @@ public class QrSessionDao implements Dao<QrSession> {
             e.printStackTrace();
         }
         return Optional.empty();
+    }
+
+    /**
+     * Resolves the persisted QR session uniquely associated with a planned
+     * academic session, regardless of active, closed, or expired state.
+     *
+     * This is the ASSOCIATION lookup used by display-eligibility evaluation.
+     * It intentionally does NOT filter on is_active or closed_at so that an
+     * expired or closed planned QR can still be found and its state examined
+     * (to render an expired banner rather than falling through to ordinary
+     * 60-minute QR creation).
+     *
+     * Isolation guarantees:
+     * - ordinary QR sessions (planned_session_id IS NULL) can never match.
+     * - the unique constraint uq_qr_planned_session prevents more than one row
+     *   from matching a given plannedSessionId.
+     *
+     * @throws IllegalStateException if more than one row matches (integrity error).
+     */
+    public Optional<QrSession> findByPlannedSessionId(int plannedSessionId) {
+        String sql = "SELECT qs.*, c.course_code, c.course_name, u.name AS teacher_name " +
+                     "FROM qr_sessions qs " +
+                     "JOIN courses c ON qs.course_id = c.id " +
+                     "JOIN teachers t ON qs.teacher_id = t.teacher_id " +
+                     "JOIN users u ON t.user_id = u.id " +
+                     "WHERE qs.planned_session_id = ? " +
+                     "LIMIT 2"; // LIMIT 2 to detect unexpected duplicates
+        try (Connection conn = DBConnection.getInstance().getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, plannedSessionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                QrSession first = null;
+                if (rs.next()) {
+                    first = mapResultSetToQrSession(rs);
+                    if (rs.next()) {
+                        // Duplicate association violates the unique constraint — surface as integrity error.
+                        throw new IllegalStateException(
+                            "Integrity error: multiple qr_sessions rows reference planned_session_id=" + plannedSessionId);
+                    }
+                }
+                return Optional.ofNullable(first);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Atomically inserts a new QR session that is linked to a planned academic
+     * session.  Unlike {@link #save(QrSession)}, this method:
+     * <ul>
+     *   <li>Accepts an explicit {@code expiresAt} Timestamp (UTC) computed by
+     *       {@code PlannedSessionDao.calculateMeetingExpiry()} rather than
+     *       hard-coding a 60-minute offset.</li>
+     *   <li>Persists {@code planned_session_id} so the association can be
+     *       retrieved later via {@link #findByPlannedSessionId(int)}.</li>
+     * </ul>
+     *
+     * The caller is responsible for managing the surrounding transaction and
+     * for setting the initial session token before calling this method.
+     *
+     * @param session        fully-populated QrSession (courseId, teacherId, token, active)
+     * @param plannedSessionId the planned_sessions.id to link
+     * @param expiresAtUtc   explicit expiry as a java.sql.Timestamp in UTC
+     * @return {@code true} and populates {@code session.id} on success
+     */
+    public boolean saveForPlannedSession(QrSession session, int plannedSessionId, java.sql.Timestamp expiresAtUtc) {
+        if (session.getSessionToken() == null || session.getSessionToken().trim().isEmpty()) {
+            session.setSessionToken("init_" + System.currentTimeMillis() + "_" + java.util.UUID.randomUUID().toString().replace("-", ""));
+        }
+        String sql = "INSERT INTO qr_sessions " +
+                     "(session_token, course_id, planned_session_id, teacher_id, expires_at, is_active) " +
+                     "VALUES (?, ?, ?, ?, ?, ?)";
+        try (Connection conn = DBConnection.getInstance().getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, session.getSessionToken());
+            ps.setInt(2, session.getCourseId());
+            ps.setInt(3, plannedSessionId);
+            ps.setInt(4, session.getTeacherId());
+            ps.setTimestamp(5, expiresAtUtc);
+            ps.setBoolean(6, session.isActive());
+            int affected = ps.executeUpdate();
+            if (affected > 0) {
+                try (ResultSet keys = ps.getGeneratedKeys()) {
+                    if (keys.next()) {
+                        session.setId(keys.getInt(1));
+                    }
+                }
+                return true;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     public boolean updateActiveToken(int sessionId, String newToken) {
@@ -320,6 +415,15 @@ public class QrSessionDao implements Dao<QrSession> {
             }
         } catch (SQLException ignored) {}
         s.setActive(rs.getBoolean("is_active"));
+        // Map planned_session_id — may be NULL for ordinary (non-planned) sessions.
+        try {
+            int psId = rs.getInt("planned_session_id");
+            if (!rs.wasNull()) {
+                s.setPlannedSessionId(psId);
+            }
+        } catch (SQLException ignored) {
+            // Column absent in queries that do not SELECT it — treat as null.
+        }
         return s;
     }
 }
