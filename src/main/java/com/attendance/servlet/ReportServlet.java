@@ -118,12 +118,11 @@ public class ReportServlet extends HttpServlet {
         response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
 
         PrintWriter writer = response.getWriter();
-        writer.println("Attendance ID,Course Code,Roll Number,Student Name,Marked At,Status,Session ID");
+        writer.println("Attendance ID,Course Code,Roll Number,Student Name,Marked At (IST),Status,Session ID");
 
-        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         if (attendanceList != null) {
             for (Attendance a : attendanceList) {
-                String markedAtStr = a.getMarkedAt() != null ? a.getMarkedAt().format(dtf) : "N/A";
+                String markedAtStr = com.attendance.util.DateTimeUtil.formatToIst(a.getMarkedAt());
                 writer.println(String.format("%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%d",
                         a.getId(),
                         escapeCsv(a.getCourseCode() != null ? a.getCourseCode() : course.getCourseCode()),

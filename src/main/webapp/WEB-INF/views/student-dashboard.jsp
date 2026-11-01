@@ -4,6 +4,7 @@
 <%@ page import="com.attendance.model.CourseSchedule" %>
 <%@ page import="com.attendance.model.Student" %>
 <%@ page import="com.attendance.model.User" %>
+<%@ page import="com.attendance.util.DateTimeUtil" %>
 <%@ page import="java.time.format.DateTimeFormatter" %>
 <%@ page import="java.util.List" %>
 <%@ page import="java.util.Map" %>
@@ -336,7 +337,7 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>Timestamp</th>
+                                <th>Timestamp (IST)</th>
                                 <th>Course Code</th>
                                 <th>Course Title</th>
                                 <th>Status</th>
@@ -346,8 +347,8 @@
                         <tbody>
                             <% for (Attendance att : history) { %>
                                 <tr>
-                                    <td style="color: var(--text-secondary);">
-                                        <%= att.getMarkedAt() != null ? att.getMarkedAt().format(dtf) : "—" %>
+                                    <td style="color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; font-size: 0.88rem;">
+                                        <%= att.getMarkedAt() != null ? DateTimeUtil.formatToIst(att.getMarkedAt()) : "—" %>
                                     </td>
                                     <td><strong><%= att.getCourseCode() %></strong></td>
                                     <td><%= att.getCourseName() %></td>

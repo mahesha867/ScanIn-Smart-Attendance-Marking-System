@@ -3,6 +3,7 @@
 <%@ page import="com.attendance.model.AttendanceAuditLog" %>
 <%@ page import="com.attendance.model.Course" %>
 <%@ page import="com.attendance.model.User" %>
+<%@ page import="com.attendance.util.DateTimeUtil" %>
 <%@ page import="java.time.format.DateTimeFormatter" %>
 <%@ page import="java.util.List" %>
 <%
@@ -171,7 +172,7 @@
                         <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; text-align: left;">
                             <th style="padding: 0.85rem 1.25rem; font-size: 0.78rem; text-transform: uppercase; color: #64748b;">Roll No</th>
                             <th style="padding: 0.85rem 1.25rem; font-size: 0.78rem; text-transform: uppercase; color: #64748b;">Student Name</th>
-                            <th style="padding: 0.85rem 1.25rem; font-size: 0.78rem; text-transform: uppercase; color: #64748b;">Date & Time</th>
+                            <th style="padding: 0.85rem 1.25rem; font-size: 0.78rem; text-transform: uppercase; color: #64748b;">Date & Time (IST)</th>
                             <th style="padding: 0.85rem 1.25rem; font-size: 0.78rem; text-transform: uppercase; color: #64748b;">Session</th>
                             <th style="padding: 0.85rem 1.25rem; font-size: 0.78rem; text-transform: uppercase; color: #64748b;">Status</th>
                             <th style="padding: 0.85rem 1.25rem; font-size: 0.78rem; text-transform: uppercase; color: #64748b; text-align: right;">Action</th>
@@ -190,14 +191,14 @@
                                 <tr style="border-bottom: 1px solid #f1f5f9;">
                                     <td style="padding: 0.85rem 1.25rem;">
                                         <span class="badge" style="background: rgba(88, 44, 131, 0.08); color: var(--color-purple); font-family: 'JetBrains Mono', monospace; font-weight: 700;">
-                                            <%= a.getRollNumber() != null ? a.getRollNumber() : "—" %>
+                                             <%= a.getRollNumber() != null ? a.getRollNumber() : "—" %>
                                         </span>
                                     </td>
                                     <td style="padding: 0.85rem 1.25rem; font-weight: 600; color: #1e293b;">
                                         <%= a.getStudentName() %>
                                     </td>
-                                    <td style="padding: 0.85rem 1.25rem; color: #475569; font-size: 0.88rem;">
-                                        <%= a.getMarkedAt() != null ? a.getMarkedAt().format(dtf) : "N/A" %>
+                                    <td style="padding: 0.85rem 1.25rem; color: #475569; font-size: 0.88rem; font-family: 'JetBrains Mono', monospace; font-weight: 600;">
+                                        <%= DateTimeUtil.formatToIst(a.getMarkedAt()) %>
                                     </td>
                                     <td style="padding: 0.85rem 1.25rem;">
                                         <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: #64748b;">
@@ -249,7 +250,7 @@
                 <table class="data-table" style="width: 100%; border-collapse: collapse;">
                     <thead>
                         <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; text-align: left;">
-                            <th style="padding: 0.85rem 1.25rem; font-size: 0.78rem; text-transform: uppercase; color: #64748b;">Timestamp</th>
+                            <th style="padding: 0.85rem 1.25rem; font-size: 0.78rem; text-transform: uppercase; color: #64748b;">Timestamp (IST)</th>
                             <th style="padding: 0.85rem 1.25rem; font-size: 0.78rem; text-transform: uppercase; color: #64748b;">Student</th>
                             <th style="padding: 0.85rem 1.25rem; font-size: 0.78rem; text-transform: uppercase; color: #64748b;">Modified By (Actor)</th>
                             <th style="padding: 0.85rem 1.25rem; font-size: 0.78rem; text-transform: uppercase; color: #64748b;">Status Transition</th>
@@ -260,8 +261,8 @@
                         <% if (auditLogs != null && !auditLogs.isEmpty()) { 
                             for (AttendanceAuditLog log : auditLogs) { %>
                                 <tr style="border-bottom: 1px solid #f1f5f9;">
-                                    <td style="padding: 0.85rem 1.25rem; font-size: 0.85rem; color: #475569;">
-                                        <%= log.getCreatedAt() != null ? log.getCreatedAt().format(dtf) : "N/A" %>
+                                    <td style="padding: 0.85rem 1.25rem; font-size: 0.85rem; color: #475569; font-family: 'JetBrains Mono', monospace; font-weight: 600;">
+                                        <%= DateTimeUtil.formatToIst(log.getCreatedAt()) %>
                                     </td>
                                     <td style="padding: 0.85rem 1.25rem;">
                                         <div style="font-weight: 600; color: #1e293b;"><%= log.getStudentName() != null ? log.getStudentName() : ("Student #" + log.getStudentId()) %></div>

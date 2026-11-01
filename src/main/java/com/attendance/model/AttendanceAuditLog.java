@@ -76,4 +76,12 @@ public class AttendanceAuditLog {
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    /**
+     * Returns the formatted created-at timestamp in Indian Standard Time (IST - Asia/Kolkata).
+     * Example: "01-11-2026 10:45:32 AM IST"
+     */
+    public String getCreatedAtIst() {
+        return com.attendance.util.DateTimeUtil.formatToIst(this.createdAt);
+    }
 }

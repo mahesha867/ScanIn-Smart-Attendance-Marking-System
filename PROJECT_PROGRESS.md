@@ -14,6 +14,7 @@
 | **Stage 8** | Final academic submission readiness | ✅ APPROVED | 2026-10-20 |
 | **Stage 9** | Persistent Class Meetings & Timezone Standardization | ✅ APPROVED | 2026-10-20 |
 | **Stage 10** | 7-Second QR Token Timing & Monotonic Clock Synchronization Fix | ✅ APPROVED | 2026-11-01 |
+| **Stage 11** | Faculty Attendance Timestamp Display in Indian Standard Time (IST) | ✅ APPROVED | 2026-11-01 |
 
 ---
 
@@ -545,8 +546,9 @@ Stage 7 Verification (Session Lifecycle, Audit Trail, CSV Export):   8 / 8   PAS
 Stage 8 Verification (Session-Bound 6-Digit Code, Rate Limiting):    5 / 5   PASS
 Class Meeting Verification (Persistent Meetings, UTC Timezone):     10 / 10  PASS
 QR Timing Verification (7s Rotation, 10s Validity, Security):       23 / 23  PASS
+Timezone Verification (IST Presentation, Midnight Cross, DB Sync):   7 / 7   PASS
 ---------------------------------------------------------------------------------
-TOTAL AUTOMATED TESTS:                                              85 / 85  PASS (100%)
+TOTAL AUTOMATED TESTS:                                              92 / 92  PASS (100%)
 ```
 
 ---
@@ -568,6 +570,49 @@ Automated browser performance instrumentation executed via Chrome DevTools Proto
 | **Page Refresh Idempotency** | Preserves active meeting session | Page reloaded cleanly with zero duplicate timers or meeting rows | ✅ PASS |
 | **Database Session Invariance** | Zero additional meeting rows | Initial Max Session ID `572` $\rightarrow$ Final Max Session ID `572` | ✅ PASS |
 | **Window Timer Singleton** | No competing intervals | `ACTIVE_SINGLETON(timer=true, timeout=true)` | ✅ PASS |
+
+---
+
+## Stage 11: Faculty Attendance Timestamp Display in Indian Standard Time (IST)
+
+### 1. Problem Definition & Root-Cause Analysis
+- **Observed Behavior:** In the Faculty Dashboard (**Faculty Dashboard &rarr; Attendance Records** at `/reports`), attendance record timestamps and audit log timestamps appeared 5 hours and 30 minutes behind actual local time (e.g., an attendance marked at 10:45 AM was displayed as `05:15:19`).
+- **Root Cause Identified:**
+  1. MySQL stores `marked_at` and `created_at` as MySQL `TIMESTAMP` columns in UTC due to `DBConnection` executing `SET time_zone = '+00:00'` and JVM default timezone `UTC`.
+  2. `AttendanceDao` and `AttendanceAuditLogDao` retrieved these columns using `rs.getTimestamp("marked_at").toLocalDateTime()`, producing a `LocalDateTime` representing raw UTC wall-clock time.
+  3. `ReportServlet.java` and JSPs (`attendance-report.jsp`, `student-dashboard.jsp`) formatted the `LocalDateTime` directly with a naive `DateTimeFormatter` (`yyyy-MM-dd HH:mm:ss`), resulting in 0 timezone conversion (a 5h 30m discrepancy).
+
+### 2. Timezone Architectural Strategy
+- **Internal Storage & DB Layer:** Retained **canonical UTC** for all database storage, SQL calculations (`UTC_TIMESTAMP()`), and scheduled meeting durations. Database schema and existing row data remain 100% untouched.
+- **Faculty & Student Presentation Layer:** Dedicated presentation formatting to **Indian Standard Time (IST — `Asia/Kolkata` — UTC+05:30)** using modern Java `java.time` APIs:
+  - `Instant` / `LocalDateTime` (UTC) &rarr; `ZonedDateTime` at `ZoneId.of("Asia/Kolkata")`.
+  - Format: `dd-MM-yyyy hh:mm:ss a IST` (e.g. `01-11-2026 10:45:32 AM IST`).
+- **Centralized & Modular Implementation:**
+  - Implemented in [`DateTimeUtil.java`](file:///c:/java_dbms_project/src/main/java/com/attendance/util/DateTimeUtil.java) (`toIst()`, `formatToIst()`, `formatToIstStandard()`, `formatToIstIso()`).
+  - Added helper accessors `getMarkedAtIst()` in `Attendance.java` and `getCreatedAtIst()` in `AttendanceAuditLog.java`.
+  - Avoided scattered scriptlet logic or manual millisecond arithmetic (`+ 5*3600*1000`).
+
+### 3. Modifications Made
+1. **[`DateTimeUtil.java`](file:///c:/java_dbms_project/src/main/java/com/attendance/util/DateTimeUtil.java) (Created):** Thread-safe, standardized utility for UTC-to-IST conversion using `Locale.ENGLISH` and predefined patterns.
+2. **[`Attendance.java`](file:///c:/java_dbms_project/src/main/java/com/attendance/model/Attendance.java) & [`AttendanceAuditLog.java`](file:///c:/java_dbms_project/src/main/java/com/attendance/model/AttendanceAuditLog.java):** Added `getMarkedAtIst()` and `getCreatedAtIst()` methods.
+3. **[`attendance-report.jsp`](file:///c:/java_dbms_project/src/main/webapp/WEB-INF/views/attendance-report.jsp):** Updated table headers to `"Date & Time (IST)"` and `"Timestamp (IST)"`, and formatted all rows with `DateTimeUtil.formatToIst(...)`.
+4. **[`ReportServlet.java`](file:///c:/java_dbms_project/src/main/java/com/attendance/servlet/ReportServlet.java):** Updated CSV export header to `"Marked At (IST)"` and formatted timestamps using `DateTimeUtil.formatToIst(a.getMarkedAt())`.
+5. **[`student-dashboard.jsp`](file:///c:/java_dbms_project/src/main/webapp/WEB-INF/views/student-dashboard.jsp):** Updated table header to `"Timestamp (IST)"` and formatted student attendance history rows via `DateTimeUtil.formatToIst(...)`.
+
+### 4. Verification Test Evidence ([`TimezoneVerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/TimezoneVerificationTest.java))
+
+| # | Test Target / Case | Verification Method | Result |
+|---|---|---|---|
+| **1** | Fixed UTC timestamp converts accurately to IST | `2026-11-01T05:00:00Z` converts exactly to `01-11-2026 10:30:00 AM IST`. | ✅ PASS |
+| **2** | Midnight UTC date crossing advances to next-day IST | `2026-10-31T20:00:00Z` (+5:30) correctly advances to `01-11-2026 01:30:00 AM IST`. | ✅ PASS |
+| **3** | Guard against double-conversion or manual offset shift | Epoch millisecond invariance verified: `toInstant().toEpochMilli()` equals original instant. | ✅ PASS |
+| **4** | Database-retrieved attendance records format in IST | Persisted row with UTC timestamp formats to IST predictably on retrieval. | ✅ PASS |
+| **5** | Manual attendance, OD, and EXCUSED records audit log formats in IST | Full status transition audit trail (`OD` &rarr; `EXCUSED`) timestamps verified in IST. | ✅ PASS |
+| **6** | Persistent class meeting lifecycle storage remains canonical UTC | Verified `qr_sessions` table retains 60-minute meeting duration and UTC expiration. | ✅ PASS |
+| **7** | Live Faculty Report JSP and CSV export render IST | Authenticated GET requests to `/reports` and `/reports?format=csv` verified to render IST headers and values. | ✅ PASS |
+
+**Result:** **7 / 7 Tests Passed (100%)**.
+
 
 
 

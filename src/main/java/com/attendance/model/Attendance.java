@@ -59,6 +59,14 @@ public class Attendance {
     public LocalDateTime getMarkedAt()                { return markedAt; }
     public void setMarkedAt(LocalDateTime markedAt)   { this.markedAt = markedAt; }
 
+    /**
+     * Returns the formatted marked-at timestamp in Indian Standard Time (IST - Asia/Kolkata).
+     * Example: "01-11-2026 10:45:32 AM IST"
+     */
+    public String getMarkedAtIst() {
+        return com.attendance.util.DateTimeUtil.formatToIst(this.markedAt);
+    }
+
     public String getStatus()                         { return status; }
     public void setStatus(String status)              { this.status = status; }
 
