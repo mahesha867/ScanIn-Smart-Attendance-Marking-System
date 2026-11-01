@@ -3,10 +3,12 @@ package com.attendance.servlet;
 import com.attendance.dao.AttendanceDao;
 import com.attendance.dao.CourseDao;
 import com.attendance.dao.CourseScheduleDao;
+import com.attendance.dao.PlannedSessionDao;
 import com.attendance.dao.StudentDao;
 import com.attendance.model.Attendance;
 import com.attendance.model.Course;
 import com.attendance.model.CourseSchedule;
+import com.attendance.model.PlannedSession;
 import com.attendance.model.Student;
 import com.attendance.model.User;
 import com.attendance.util.SessionUtil;
@@ -40,6 +42,7 @@ public class StudentDashboardServlet extends HttpServlet {
     private CourseDao courseDao;
     private AttendanceDao attendanceDao;
     private CourseScheduleDao scheduleDao;
+    private PlannedSessionDao plannedSessionDao;
 
     @Override
     public void init() throws ServletException {
@@ -47,6 +50,15 @@ public class StudentDashboardServlet extends HttpServlet {
         this.courseDao = new CourseDao();
         this.attendanceDao = new AttendanceDao();
         this.scheduleDao = new CourseScheduleDao();
+        this.plannedSessionDao = new PlannedSessionDao();
+    }
+
+    public void setPlannedSessionDao(PlannedSessionDao plannedSessionDao) {
+        this.plannedSessionDao = plannedSessionDao;
+    }
+
+    public void setStudentDao(StudentDao studentDao) {
+        this.studentDao = studentDao;
     }
 
     @Override
@@ -85,10 +97,20 @@ public class StudentDashboardServlet extends HttpServlet {
             // 2. Upcoming Classes
             List<CourseSchedule> upcomingClasses = scheduleDao.findUpcomingClassesForStudent(student.getStudentId());
 
-            // 3. Available Courses for Registration
+            // 3. Planned Academic Sessions & Attendance (Stage 13-C3)
+            List<PlannedSession> plannedSessions = new java.util.ArrayList<>();
+            try {
+                if (plannedSessionDao != null) {
+                    plannedSessions = plannedSessionDao.findByStudentEnrollmentWithAttendance(student.getStudentId());
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            // 4. Available Courses for Registration
             List<Course> availableCourses = courseDao.getAvailableCoursesForStudent(student.getStudentId());
 
-            // 4. Attendance History Log
+            // 5. Attendance History Log
             List<Attendance> history = attendanceDao.findByStudent(student.getStudentId());
 
             request.setAttribute("student", student);
@@ -97,6 +119,7 @@ public class StudentDashboardServlet extends HttpServlet {
             request.setAttribute("overallAttendance", overallAttendance);
             request.setAttribute("hasLowAttendance", hasLowAttendance);
             request.setAttribute("upcomingClasses", upcomingClasses);
+            request.setAttribute("plannedSessions", plannedSessions);
             request.setAttribute("availableCourses", availableCourses);
             request.setAttribute("history", history);
         }
