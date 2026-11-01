@@ -4,23 +4,64 @@ import com.attendance.util.DBConnection;
 import jakarta.servlet.ServletContextEvent;
 import jakarta.servlet.ServletContextListener;
 import jakarta.servlet.annotation.WebListener;
+import jakarta.servlet.http.HttpSessionEvent;
+import jakarta.servlet.http.HttpSessionListener;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.util.TimeZone;
 
 /**
- * Ensures a consistent UTC timezone strategy and executes startup schema self-healing migrations.
+ * Ensures a consistent UTC timezone strategy, dynamic cookie security configuration,
+ * configurable session timeout, and startup schema self-healing migrations.
  */
 @WebListener
-public class AppContextListener implements ServletContextListener {
+public class AppContextListener implements ServletContextListener, HttpSessionListener {
 
     @Override
     public void contextInitialized(ServletContextEvent sce) {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
         System.out.println("[AppContextListener] Application default timezone configured to UTC.");
 
+        // Configure session cookie security: HttpOnly always, Secure for HTTPS staging/production
+        try {
+            jakarta.servlet.SessionCookieConfig cookieConfig = sce.getServletContext().getSessionCookieConfig();
+            cookieConfig.setHttpOnly(true);
+            String cookieSecureEnv = System.getenv("COOKIE_SECURE");
+            if (cookieSecureEnv == null || cookieSecureEnv.trim().isEmpty()) {
+                cookieSecureEnv = System.getenv("SESSION_COOKIE_SECURE");
+            }
+            if ("true".equalsIgnoreCase(cookieSecureEnv)) {
+                cookieConfig.setSecure(true);
+                System.out.println("[AppContextListener] Session cookie secure flag enabled (HTTPS deployment).");
+            } else {
+                cookieConfig.setSecure(false);
+                System.out.println("[AppContextListener] Session cookie secure flag disabled (Local HTTP demonstration).");
+            }
+        } catch (Exception e) {
+            System.err.println("[AppContextListener] SessionCookieConfig notice: " + e.getMessage());
+        }
+
         // Execute self-healing database migrations on startup
         runStartupMigrations();
+    }
+
+    @Override
+    public void sessionCreated(HttpSessionEvent se) {
+        int timeoutMinutes = 30; // Default 30 min (replaces legacy 60 min)
+        String envTimeout = System.getenv("SESSION_TIMEOUT_MINUTES");
+        if (envTimeout != null && !envTimeout.trim().isEmpty()) {
+            try {
+                int parsed = Integer.parseInt(envTimeout.trim());
+                if (parsed > 0) {
+                    timeoutMinutes = parsed;
+                }
+            } catch (NumberFormatException ignored) {}
+        }
+        se.getSession().setMaxInactiveInterval(timeoutMinutes * 60);
+    }
+
+    @Override
+    public void sessionDestroyed(HttpSessionEvent se) {
     }
 
     private void runStartupMigrations() {
@@ -85,6 +126,16 @@ public class AppContextListener implements ServletContextListener {
             // 2c. Ensure attendance status column supports OD and EXCUSED
             try {
                 stmt.executeUpdate("ALTER TABLE attendance MODIFY COLUMN status ENUM('PRESENT','ABSENT','LATE','OD','EXCUSED') DEFAULT 'PRESENT'");
+            } catch (Exception ignored) {}
+
+            // 2d. Ensure enrollments status and dropped_at columns exist for historical enrollment retention
+            try {
+                stmt.executeUpdate("ALTER TABLE enrollments ADD COLUMN status ENUM('ACTIVE','DROPPED') NOT NULL DEFAULT 'ACTIVE'");
+                System.out.println("[AppContextListener] Ensured enrollments.status column exists.");
+            } catch (Exception ignored) {}
+            try {
+                stmt.executeUpdate("ALTER TABLE enrollments ADD COLUMN dropped_at TIMESTAMP NULL DEFAULT NULL");
+                System.out.println("[AppContextListener] Ensured enrollments.dropped_at column exists.");
             } catch (Exception ignored) {}
 
             // 3. Clean up any corrupted legacy 'pending_init' sessions so they never block new sessions

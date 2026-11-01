@@ -36,10 +36,14 @@ public class UserDao implements Dao<User> {
         return Optional.empty();
     }
 
-    public static volatile String lastSqlError = null;
+    public static volatile boolean lastQueryHadDatabaseError = false;
+
+    public static boolean hadDatabaseError() {
+        return lastQueryHadDatabaseError;
+    }
 
     public Optional<User> findByEmail(String email) {
-        lastSqlError = null;
+        lastQueryHadDatabaseError = false;
         String sql = "SELECT * FROM users WHERE email = ?";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -50,8 +54,8 @@ public class UserDao implements Dao<User> {
                 }
             }
         } catch (SQLException e) {
-            lastSqlError = e.getMessage();
-            e.printStackTrace();
+            lastQueryHadDatabaseError = true;
+            System.err.println("[UserDao] Database query failed: " + e.getMessage());
         }
         return Optional.empty();
     }
