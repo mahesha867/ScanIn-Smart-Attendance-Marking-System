@@ -21,6 +21,8 @@
 | **Stage 15** | Final Build, Packaging & Release Verification | ✅ APPROVED | 2026-11-01 |
 | **Stage 16** | Controlled Tomcat Deployment & Live HTTP Verification | ✅ APPROVED | 2026-11-01 |
 | **Stage 17** | Final Git Audit, Change Classification & Commit Preparation | ✅ APPROVED | 2026-11-01 |
+| **Stage 18** | Controlled Git Staging & Five-Commit Execution | ✅ APPROVED | 2026-11-01 |
+| **Stage 19** | Post-Commit Repository & Release Readiness Audit | ✅ APPROVED | 2026-11-01 |
 
 ---
 
@@ -841,6 +843,112 @@ The following artifacts remain local and are excluded from commits:
 
 ### 7. Verdict: **PASS — Repository audited and ready for commit review**
 Comprehensive Evidence Report: [`Stage17_Git_Audit_And_Commit_Preparation_Report.md`](file:///C:/java_dbms_project/Stage17_Git_Audit_And_Commit_Preparation_Report.md).
+
+---
+
+## Stage 18 — Controlled Git Staging & Five-Commit Execution Report
+
+### 1. Execution Summary
+- **Starting Baseline HEAD:** `9b59559e0ef5c5a5e3e29be1eaf131fad8442d0b`
+- **Final HEAD:** `b349c59d9ddcd4b3dc736a66f4162b9efbb993fb`
+- **Branch:** `main`
+- **Commits Created:** Exactly **5** atomic commits
+- **Files Committed:** Exactly **47** unique files (zero files duplicated across commits)
+- **Staging Hygiene:** Clean staging area (0 staged files remaining)
+
+### 2. Five Sequential Commit Records
+
+```mermaid
+gitGraph
+   commit id: "9b59559" tag: "Stage 11 Baseline"
+   commit id: "dd97079" msg: "feat(db): add planned sessions and historical enrollment migrations"
+   commit id: "6130621" msg: "feat(backend): implement planned session models and transactional attendance access"
+   commit id: "1868bf7" msg: "security: enforce fail-closed configuration and session protections"
+   commit id: "47e75a4" msg: "feat(frontend): implement planned session dashboards and QR attendance interface"
+   commit id: "b349c59" msg: "test & docs: add comprehensive unit test suites (200 tests) and Stage 14-17 audit reports"
+```
+
+1. **Commit 1 (`dd97079c4ed349a09782705eb09e6e996cc19e36`):**
+   - **Message:** `feat(db): add planned sessions and historical enrollment migrations`
+   - **Parent:** `9b59559e0ef5c5a5e3e29be1eaf131fad8442d0b` (Baseline Starting HEAD)
+   - **Files (4):** `database/migration_stage12_planned_sessions.sql`, `database/migration_stage14_historical_enrollments.sql`, `database/rollback_stage12_planned_sessions.sql`, `database/rollback_stage14_historical_enrollments.sql`
+2. **Commit 2 (`6130621cd8354804471789039b4da9a341c0b21a`):**
+   - **Message:** `feat(backend): implement planned session models and transactional attendance access`
+   - **Parent:** `dd97079c4ed349a09782705eb09e6e996cc19e36` (Commit 1)
+   - **Files (10):** `PlannedSession.java`, `QrSession.java`, `SessionRosterItem.java`, `SessionRosterMetrics.java`, `AttendanceDao.java`, `CourseDao.java`, `CourseScheduleDao.java`, `PlannedSessionDao.java`, `QrSessionDao.java`, `StudentDao.java`
+3. **Commit 3 (`1868bf7aac5b25998aa5a702deb4a5e62c400923`):**
+   - **Message:** `security: enforce fail-closed configuration and session protections`
+   - **Parent:** `6130621cd8354804471789039b4da9a341c0b21a` (Commit 2)
+   - **Files (7):** `DBConnection.java`, `QrCodeUtil.java`, `SessionUtil.java`, `UserDao.java`, `AppContextListener.java`, `LoginServlet.java`, `web.xml`
+4. **Commit 4 (`47e75a4c44d111f65dd523d0b2ccd0a1c40425d4`):**
+   - **Message:** `feat(frontend): implement planned session dashboards and QR attendance interface`
+   - **Parent:** `1868bf7aac5b25998aa5a702deb4a5e62c400923` (Commit 3)
+   - **Files (11):** `QrGenerateServlet.java`, `QrScanServlet.java`, `StudentDashboardServlet.java`, `TeacherDashboardServlet.java`, `qr-display.jsp`, `qr-scan.jsp`, `student-dashboard.jsp`, `teacher-dashboard.jsp`, `style.css`, `qr-scanner.js`, `session-roster.js`
+5. **Commit 5 (`b349c59d9ddcd4b3dc736a66f4162b9efbb993fb`):**
+   - **Message:** `test & docs: add comprehensive unit test suites (200 tests) and Stage 14-17 audit reports`
+   - **Parent:** `47e75a4c44d111f65dd523d0b2ccd0a1c40425d4` (Commit 4)
+   - **Files (15):** 10 unit test suites (`src/test/java/com/attendance/*.java`), `PROJECT_PROGRESS.md`, `Stage14_Security_Remediation_Report.md`, `Stage15_Build_And_Release_Verification_Report.md`, `Stage16_Controlled_Deployment_And_HTTP_Verification_Report.md`, `Stage17_Git_Audit_And_Commit_Preparation_Report.md`
+
+### 3. Preserved Local Exclusions (6 Items)
+The 6 local generated, backup, and binary artifacts remain intact and excluded:
+1. `[ M] dist/attendance.war` (tracked binary WAR: 3,225,858 bytes, SHA-256 `C80AC9FB...`)
+2. `[ M] tomcat/webapps/attendance.war` (tracked binary WAR: 3,225,858 bytes, SHA-256 `C80AC9FB...`)
+3. `[??] build/` (temporary staging directory)
+4. `[??] dist/attendance-stage15-candidate.war` (release candidate WAR: 3,061,197 bytes, SHA-256 `3637897B...`)
+5. `[??] dist/backups/` (pre-Stage 15 backup WARs)
+6. `[??] tomcat/webapps/attendance.war.bak_20261101_175124` (pre-deployment backup WAR)
+
+### 4. Integrity Ledger & Status
+- **Staged Count:** `0`
+- **Remaining Status Entries:** `6` (the 6 preserved local exclusions) + `PROJECT_PROGRESS.md` (Stage 18 progress update)
+- **Push Execution:** None (all commits remain strictly local)
+- **Database / Container Status:** Zero database connections; Tomcat stopped; port 8080 free.
+
+### 5. Verdict: **PASS — All five commits successfully created and verified.**
+
+---
+
+## Stage 19 — Post-Commit Repository & Release Readiness Audit Report
+
+### 1. Verification Context & Baseline Invariance
+- **Working Tree Branch:** `main`
+- **Git HEAD SHA:** `b349c59d9ddcd4b3dc736a66f4162b9efbb993fb` (Matches expected Stage 18 HEAD).
+- **Execution Mode:** Read-only post-commit repository and release readiness audit.
+- **Commit Lineage:** 5 sequential commits verified back to baseline `9b59559e0ef5c5a5e3e29be1eaf131fad8442d0b` (`HEAD~5`).
+
+### 2. Five Sequential Commit Lineage Ledger
+
+| # | Full Commit SHA | Parent Commit SHA | Commit Message | Files | Result |
+|---|---|---|---|---:|---|
+| **1** | `dd97079c4ed349a09782705eb09e6e996cc19e36` | `9b59559e0ef5c5a5e3e29be1eaf131fad8442d0b` | `feat(db): add planned sessions and historical enrollment migrations` | 4 | ✅ VERIFIED |
+| **2** | `6130621cd8354804471789039b4da9a341c0b21a` | `dd97079c4ed349a09782705eb09e6e996cc19e36` | `feat(backend): implement planned session models and transactional attendance access` | 10 | ✅ VERIFIED |
+| **3** | `1868bf7aac5b25998aa5a702deb4a5e62c400923` | `6130621cd8354804471789039b4da9a341c0b21a` | `security: enforce fail-closed configuration and session protections` | 7 | ✅ VERIFIED |
+| **4** | `47e75a4c44d111f65dd523d0b2ccd0a1c40425d4` | `1868bf7aac5b25998aa5a702deb4a5e62c400923` | `feat(frontend): implement planned session dashboards and QR attendance interface` | 11 | ✅ VERIFIED |
+| **5** | `b349c59d9ddcd4b3dc736a66f4162b9efbb993fb` | `47e75a4c44d111f65dd523d0b2ccd0a1c40425d4` | `test & docs: add comprehensive unit test suites (200 tests) and Stage 14-17 audit reports` | 15 | ✅ VERIFIED |
+
+### 3. Exact 47-File Audit Summary
+- **Expected Files:** 47
+- **Actual Unique Committed Files:** 47
+- **Missing / Unexpected / Duplicate Paths:** 0
+- **Excluded Artifacts Committed:** 0 (Zero binary WARs, zero backups, zero staging directories, zero credential files)
+
+### 4. Preserved Local Exclusions (6 Items)
+The 6 local generated, backup, and binary artifacts remain intact with byte-identical SHA-256 hashes:
+1. `dist/attendance.war` (3,225,858 bytes, SHA-256 `C80AC9FBDAFBC326E3AADACACC720D93C105B40D460848385C0A10A608673E33`)
+2. `tomcat/webapps/attendance.war` (3,225,858 bytes, SHA-256 `C80AC9FBDAFBC326E3AADACACC720D93C105B40D460848385C0A10A608673E33`)
+3. `dist/attendance-stage15-candidate.war` (3,061,197 bytes, SHA-256 `3637897BA009A476F1C793B5A3406F08CC6390AD2F5EF7990BB63BEE885B922B`)
+4. `dist/backups/attendance-dist-pre-stage15-20261101_1950.war` (3,225,858 bytes, SHA-256 `C80AC9FB...`)
+5. `dist/backups/attendance-tomcat-pre-stage15-20261101_1950.war` (3,225,858 bytes, SHA-256 `C80AC9FB...`)
+6. `tomcat/webapps/attendance.war.bak_20261101_175124` (3,225,858 bytes, SHA-256 `C80AC9FB...`)
+
+### 5. Security & Readiness Assessment
+- **Static Invariants:** Fail-closed DB connection pool (`DBConnection.java`), dynamic HMAC entropy validation ($H \ge 2.5$, length $\ge 32$ bytes), session fixation defense (`request.changeSessionId()`), constant-time CSRF validation (`MessageDigest.isEqual`), sanitized SQL errors, and application-level course deletion guards verified.
+- **Historical Testing Evidence:** ACID concurrency verified on MySQL 8.0 (Stage 13-V: 0 deadlocks across 10 iterations); live Tomcat HTTP deployment verified (Stage 16: 25/25 smoke tests passed, Chrome 156 CDP rotation verified).
+- **Physical Limitation:** Optical webcam capture unverified in headless testing environment; manual 6-digit numeric fallback confirmed operational.
+
+### 6. Verdict: **PASS WITH OBSERVATIONS — Repository verified and ready for separately authorized next stage.**
+
+
 
 
 
