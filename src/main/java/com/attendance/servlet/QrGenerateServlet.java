@@ -170,12 +170,22 @@ public class QrGenerateServlet extends HttpServlet {
             }
 
             QrSession session = activeOpt.get();
-            // Refresh ephemeral 7-second rotating cryptographic token and 6-digit numeric fallback
+            // Server-synchronized 7-second rotating cryptographic token and 6-digit numeric fallback
             long now = System.currentTimeMillis();
-            String token = QrCodeUtil.generateSignedTokenWithTimestamp(session.getId(), courseId, now);
+            long step = QrCodeUtil.getCurrentTimeStep(now);
+            long stepStartMs = step * QrCodeUtil.ROTATION_INTERVAL_MS;
+            long nextRotationBoundary = QrCodeUtil.getNextRotationBoundary(now);
+            long remainingMs = QrCodeUtil.getRemainingMsInStep(now);
+            int remainingSeconds = (int) Math.max(0L, (remainingMs + 999L) / 1000L);
+
+            String token = QrCodeUtil.generateSignedTokenForStep(session.getId(), courseId, step);
             String numericCode = QrCodeUtil.computeNumericCode(session.getId(), courseId, now);
-            qrSessionDao.updateActiveToken(session.getId(), token);
-            session.setSessionToken(token);
+
+            // Synchronize active session token in DB only when step advances
+            if (!token.equals(session.getSessionToken())) {
+                qrSessionDao.updateActiveToken(session.getId(), token);
+                session.setSessionToken(token);
+            }
 
             String host = request.getServerName();
             int port = request.getServerPort();
@@ -194,6 +204,12 @@ public class QrGenerateServlet extends HttpServlet {
                         + "\"numericCode\":\"" + numericCode + "\","
                         + "\"scanUrl\":\"" + fullScanUrl + "\","
                         + "\"sessionId\":" + session.getId() + ","
+                        + "\"serverTimestamp\":" + now + ","
+                        + "\"step\":" + step + ","
+                        + "\"tokenGeneratedAt\":" + stepStartMs + ","
+                        + "\"nextRotationBoundary\":" + nextRotationBoundary + ","
+                        + "\"remainingMs\":" + remainingMs + ","
+                        + "\"remainingSeconds\":" + remainingSeconds + ","
                         + "\"expiresInSeconds\":" + QrCodeUtil.ROTATION_INTERVAL_SECONDS + ","
                         + "\"markedCount\":" + markedList.size()
                         + "}");
@@ -233,10 +249,19 @@ public class QrGenerateServlet extends HttpServlet {
 
         // Generate initial rotating token for this active class meeting
         long now = System.currentTimeMillis();
-        String token = QrCodeUtil.generateSignedTokenWithTimestamp(session.getId(), courseId, now);
+        long step = QrCodeUtil.getCurrentTimeStep(now);
+        long stepStartMs = step * QrCodeUtil.ROTATION_INTERVAL_MS;
+        long nextRotationBoundary = QrCodeUtil.getNextRotationBoundary(now);
+        long remainingMs = QrCodeUtil.getRemainingMsInStep(now);
+        int remainingSeconds = (int) Math.max(1L, (remainingMs + 999L) / 1000L);
+
+        String token = QrCodeUtil.generateSignedTokenForStep(session.getId(), courseId, step);
         String numericCode = QrCodeUtil.computeNumericCode(session.getId(), courseId, now);
-        qrSessionDao.updateActiveToken(session.getId(), token);
-        session.setSessionToken(token);
+
+        if (!token.equals(session.getSessionToken())) {
+            qrSessionDao.updateActiveToken(session.getId(), token);
+            session.setSessionToken(token);
+        }
 
         String host = request.getServerName();
         int port = request.getServerPort();
@@ -252,6 +277,12 @@ public class QrGenerateServlet extends HttpServlet {
         request.setAttribute("scanUrl", fullScanUrl);
         request.setAttribute("sessionId", session.getId());
         request.setAttribute("markedCount", markedList.size());
+        request.setAttribute("serverTimestamp", now);
+        request.setAttribute("step", step);
+        request.setAttribute("tokenGeneratedAt", stepStartMs);
+        request.setAttribute("nextRotationBoundary", nextRotationBoundary);
+        request.setAttribute("remainingMs", remainingMs);
+        request.setAttribute("remainingSeconds", remainingSeconds);
         request.getRequestDispatcher("/WEB-INF/views/qr-display.jsp").forward(request, response);
     }
 

@@ -8,7 +8,7 @@
 [![Jakarta Servlet 6.0](https://img.shields.io/badge/Jakarta%20Servlet-6.0-blueviolet.svg)](https://jakarta.ee/)
 [![MySQL 8.0 / TiDB](https://img.shields.io/badge/MySQL%20%2F%20TiDB-8.0%20Compatible-blue.svg)](https://www.mysql.com/)
 [![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
-[![Automated Tests](https://img.shields.io/badge/Automated%20Tests-82%2F82%20PASS-brightgreen.svg)]()
+[![Automated Tests](https://img.shields.io/badge/Automated%20Tests-85%2F85%20PASS-brightgreen.svg)]()
 
 ---
 
@@ -341,8 +341,8 @@ java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance
 | [`Stage7VerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage7VerificationTest.java) | Session Reopen/Reclose, Reasoned Manual Overrides, Append-Only Audit Trail, CSV Export, 6-Digit Code | 8 / 8 | ✅ PASS | Stage 7 Approved |
 | [`Stage8VerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage8VerificationTest.java) | Session-Bound 6-Digit Code, Database-Backed Rate Limiting, Formula Uniformity, Full Regression | 5 / 5 | ✅ PASS | **Stage 8 Approved** |
 | [`ClassMeetingAttendanceVerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/ClassMeetingAttendanceVerificationTest.java) | Persistent Class Meetings, Ephemeral 7s QR Tokens, UTC Timezone, Reopen Idempotency, Reporting Invariance, Merged Session Exclusion | 10 / 10 | ✅ PASS | Stage 9 Approved |
-| [`QrTimingVerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/QrTimingVerificationTest.java) | 7-Second QR Rotation, 10s Token Validity, Security Regressions, Lifecycle Invariance | 20 / 20 | ✅ PASS | Stage 10 Approved |
-| **Total Automated Tests** | **All Layers & Life-Cycle Flows (7+7+7+7+11+8+5+10+20)** | **82 / 82** | **✅ 100% PASS** | **All Stages Approved** |
+| [`QrTimingVerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/QrTimingVerificationTest.java) | 7-Second QR Rotation, 10s Token Validity, Monotonic Synchronization, Step Invariance, Security Regressions | 23 / 23 | ✅ PASS | Stage 10 Approved |
+| **Total Automated Tests** | **All Layers & Life-Cycle Flows (7+7+7+7+11+8+5+10+23)** | **85 / 85** | **✅ 100% PASS** | **All Stages Approved** |
 
 ---
 

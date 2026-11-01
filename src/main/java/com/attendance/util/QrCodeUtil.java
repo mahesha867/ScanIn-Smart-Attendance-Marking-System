@@ -22,16 +22,54 @@ public class QrCodeUtil {
 
     // Dynamic rotation interval on screen: 7 seconds
     public static final int ROTATION_INTERVAL_SECONDS = 7;
+    public static final long ROTATION_INTERVAL_MS = ROTATION_INTERVAL_SECONDS * 1000L;
 
     // Validity window: 10 seconds (7 seconds display + 3 seconds network transmission leeway)
     public static final long VALIDITY_WINDOW_MS = 10000L;
+
+    /**
+     * Calculates the deterministic time-step for a given millisecond timestamp.
+     */
+    public static long getCurrentTimeStep(long timestampMs) {
+        return timestampMs / ROTATION_INTERVAL_MS;
+    }
+
+    /**
+     * Calculates the exact epoch millisecond of the next rotation boundary.
+     */
+    public static long getNextRotationBoundary(long timestampMs) {
+        return (getCurrentTimeStep(timestampMs) + 1) * ROTATION_INTERVAL_MS;
+    }
+
+    /**
+     * Calculates the remaining milliseconds in the active time-step.
+     */
+    public static long getRemainingMsInStep(long timestampMs) {
+        return Math.max(0L, getNextRotationBoundary(timestampMs) - timestampMs);
+    }
+
+    /**
+     * Generates a cryptographically server-signed token derived for an explicit time-step.
+     * Guarantees that repeated calls within the same time-step yield the exact same token.
+     */
+    public static String generateSignedTokenForStep(int sessionId, int courseId, long step) {
+        long stepStartMs = step * ROTATION_INTERVAL_MS;
+        String nonce = computeHmac(sessionId + ":" + courseId + ":nonce:" + step).substring(0, 8);
+        String payload = sessionId + ":" + courseId + ":" + stepStartMs + ":" + nonce;
+        String signature = computeHmac(payload);
+        return sessionId + "." + courseId + "." + stepStartMs + "." + nonce + "." + signature;
+    }
 
     /**
      * Generates a cryptographically server-signed, short-lived token for an active QR session.
      * Format: sessionId.courseId.timestampMs.nonce.hmacSigHex
      */
     public static String generateSignedToken(int sessionId, int courseId) {
-        return generateSignedTokenWithTimestamp(sessionId, courseId, System.currentTimeMillis());
+        long timestamp = System.currentTimeMillis();
+        String nonce = UUID.randomUUID().toString().substring(0, 8);
+        String payload = sessionId + ":" + courseId + ":" + timestamp + ":" + nonce;
+        String signature = computeHmac(payload);
+        return sessionId + "." + courseId + "." + timestamp + "." + nonce + "." + signature;
     }
 
     /**
@@ -39,7 +77,7 @@ public class QrCodeUtil {
      * Rotates synchronously with the dynamic QR code every 7 seconds.
      */
     public static String computeNumericCode(int sessionId, int courseId, long timestamp) {
-        long step = timestamp / (ROTATION_INTERVAL_SECONDS * 1000L);
+        long step = timestamp / ROTATION_INTERVAL_MS;
         String data = sessionId + ":" + courseId + ":" + step;
         String hmac = computeHmac(data);
         // Dynamic truncation: take 4 bytes modulo 1,000,000
@@ -58,7 +96,7 @@ public class QrCodeUtil {
      * Internal/testable generator accepting an explicit timestamp.
      */
     public static String generateSignedTokenWithTimestamp(int sessionId, int courseId, long timestamp) {
-        String nonce = UUID.randomUUID().toString().substring(0, 8);
+        String nonce = computeHmac(sessionId + ":" + courseId + ":nonce:" + timestamp).substring(0, 8);
         String payload = sessionId + ":" + courseId + ":" + timestamp + ":" + nonce;
         String signature = computeHmac(payload);
         return sessionId + "." + courseId + "." + timestamp + "." + nonce + "." + signature;

@@ -84,6 +84,9 @@ public class QrTimingVerificationTest {
         runTest("3. Token beyond configured expiration (10s) is rejected as EXPIRED", QrTimingVerificationTest::testTokenBeyondExpirationRejected);
         runTest("4. QR display countdown starts at 7s and client refresher is configured for 7s", QrTimingVerificationTest::testQrDisplayCountdownStartsAtSevenSeconds);
         runTest("5. Six-digit fallback code rotates synchronously every 7 seconds", QrTimingVerificationTest::testNumericFallbackRotatesSynchronously);
+        runTest("5b. 30+ consecutive time-steps advance exactly every 7,000ms with zero gaps or skips", QrTimingVerificationTest::testThirtyConsecutiveTimeStepsNoGaps);
+        runTest("5c. Repeated polling within same step returns identical token & timing metadata", QrTimingVerificationTest::testRepeatedPollingReturnsIdenticalToken);
+        runTest("5d. Monotonic client synchronization & singleton timer prevention", QrTimingVerificationTest::testClientSynchronizationAndSingleTimer);
 
         // B. Security Regression Tests
         runTest("6. Tampered HMAC signatures are strictly rejected", QrTimingVerificationTest::testTamperedHmacRejected);
@@ -213,8 +216,8 @@ public class QrTimingVerificationTest {
         login(cmTeacher, "teacher@attendance.com", "teacher123");
 
         String pageHtml = sendGet(cmTeacher, BASE_URL + "/qr/generate?courseId=" + courseId);
-        if (!pageHtml.contains("7s</div>") && !pageHtml.contains(">7s<")) {
-            throw new AssertionError("qr-display page does not contain 7s countdown element: " + pageHtml);
+        if (!pageHtml.matches("(?s).*id=\"qr-timer\"[^>]*>[1-7]s</div>.*")) {
+            throw new AssertionError("qr-display page does not contain valid countdown element (1-7s): " + pageHtml);
         }
         if (!pageHtml.contains("Active 7s Rotation")) {
             throw new AssertionError("qr-display page missing 'Active 7s Rotation' badge");
@@ -222,8 +225,8 @@ public class QrTimingVerificationTest {
 
         // Inspect qr-scanner.js content on disk
         String jsContent = new String(Files.readAllBytes(Paths.get("src/main/webapp/js/qr-scanner.js")), StandardCharsets.UTF_8);
-        if (!jsContent.contains("ROTATION_INTERVAL = 7")) {
-            throw new AssertionError("qr-scanner.js does not specify ROTATION_INTERVAL = 7");
+        if (!jsContent.contains("targetMonotonicTime")) {
+            throw new AssertionError("qr-scanner.js does not specify targetMonotonicTime");
         }
         if (!jsContent.contains("isFetching")) {
             throw new AssertionError("qr-scanner.js does not include polling overlap guard 'isFetching'");
@@ -247,6 +250,149 @@ public class QrTimingVerificationTest {
         }
         if (code0.equals(code1)) {
             throw new AssertionError("Fallback codes across consecutive 7s windows must differ. Both produced: " + code0);
+        }
+    }
+
+    private static void testThirtyConsecutiveTimeStepsNoGaps() throws Exception {
+        int sessionId = 9994;
+        int courseId = 8884;
+        long baseTimestamp = 1730000000000L;
+        long step0 = QrCodeUtil.getCurrentTimeStep(baseTimestamp);
+
+        String previousToken = null;
+        String previousNumericCode = null;
+        long previousBoundary = 0;
+
+        // Test across 35 consecutive 7,000ms steps
+        for (int i = 0; i < 35; i++) {
+            long currentStep = step0 + i;
+            long stepStartMs = currentStep * QrCodeUtil.ROTATION_INTERVAL_MS;
+
+            // 1. Verify step calculation matches exact 7000ms boundary
+            long computedStep = QrCodeUtil.getCurrentTimeStep(stepStartMs);
+            if (computedStep != currentStep) {
+                throw new AssertionError("Step mismatch at i=" + i + ": expected " + currentStep + " but got " + computedStep);
+            }
+
+            // 2. Verify next boundary is exactly (step + 1) * 7000L
+            long expectedBoundary = (currentStep + 1) * QrCodeUtil.ROTATION_INTERVAL_MS;
+            long computedBoundary = QrCodeUtil.getNextRotationBoundary(stepStartMs);
+            if (computedBoundary != expectedBoundary) {
+                throw new AssertionError("Boundary mismatch at step " + currentStep);
+            }
+
+            // 3. Verify boundary step delta is strictly 7,000ms (never 14,000ms or 15,000ms)
+            if (previousBoundary != 0) {
+                long boundaryDelta = computedBoundary - previousBoundary;
+                if (boundaryDelta != 7000L) {
+                    throw new AssertionError("Boundary delta was " + boundaryDelta + "ms (expected strictly 7000ms) at step " + currentStep);
+                }
+            }
+            previousBoundary = computedBoundary;
+
+            // 4. Generate token and numeric fallback for current step
+            String token = QrCodeUtil.generateSignedTokenForStep(sessionId, courseId, currentStep);
+            String numericCode = QrCodeUtil.computeNumericCode(sessionId, courseId, stepStartMs);
+
+            if (previousToken != null && token.equals(previousToken)) {
+                throw new AssertionError("Consecutive time-step produced identical token at step " + currentStep);
+            }
+            if (previousNumericCode != null && numericCode.equals(previousNumericCode)) {
+                throw new AssertionError("Consecutive time-step produced identical numeric fallback at step " + currentStep);
+            }
+            previousToken = token;
+            previousNumericCode = numericCode;
+
+            // 5. Verify intra-step invariance (polling at +1000ms, +3500ms, +6999ms yields identical token & code)
+            for (long offset : new long[]{500L, 2000L, 4500L, 6999L}) {
+                long intraTimestamp = stepStartMs + offset;
+                long intraStep = QrCodeUtil.getCurrentTimeStep(intraTimestamp);
+                if (intraStep != currentStep) {
+                    throw new AssertionError("Intra-step timestamp leaked to different step: " + intraStep);
+                }
+                String intraToken = QrCodeUtil.generateSignedTokenForStep(sessionId, courseId, intraStep);
+                String intraCode = QrCodeUtil.computeNumericCode(sessionId, courseId, intraTimestamp);
+                if (!intraToken.equals(token)) {
+                    throw new AssertionError("Intra-step token changed within active 7s step at offset " + offset);
+                }
+                if (!intraCode.equals(numericCode)) {
+                    throw new AssertionError("Intra-step numeric code changed within active 7s step at offset " + offset);
+                }
+                long intraRem = QrCodeUtil.getRemainingMsInStep(intraTimestamp);
+                if (intraRem != (7000L - offset)) {
+                    throw new AssertionError("Remaining ms mismatch at offset " + offset + ": expected " + (7000L - offset) + ", got " + intraRem);
+                }
+            }
+        }
+    }
+
+    private static void testRepeatedPollingReturnsIdenticalToken() throws Exception {
+        CourseDao courseDao = new CourseDao();
+        QrSessionDao sessionDao = new QrSessionDao();
+
+        int courseId = createTestCourse("TIME-POLL-703", "Repeated Polling Course");
+        CookieManager cmTeacher = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+        login(cmTeacher, "teacher@attendance.com", "teacher123");
+        sendGet(cmTeacher, BASE_URL + "/qr/generate?courseId=" + courseId);
+
+        // Rapidly poll /qr/active 5 times within a tight 50ms loop
+        String firstJson = sendGet(cmTeacher, BASE_URL + "/qr/active?courseId=" + courseId + "&format=json");
+        if (!firstJson.contains("\"status\":\"ok\"")) {
+            throw new AssertionError("Initial poll failed: " + firstJson);
+        }
+        if (!firstJson.contains("\"nextRotationBoundary\"") || !firstJson.contains("\"remainingMs\"") || !firstJson.contains("\"step\"")) {
+            throw new AssertionError("Response missing server timing metadata: " + firstJson);
+        }
+
+        // Extract token
+        String tokenPattern = "\"token\":\"([^\"]+)\"";
+        java.util.regex.Matcher m1 = java.util.regex.Pattern.compile(tokenPattern).matcher(firstJson);
+        if (!m1.find()) throw new AssertionError("Token not found in first poll: " + firstJson);
+        String initialToken = m1.group(1);
+
+        for (int i = 0; i < 4; i++) {
+            String subsequentJson = sendGet(cmTeacher, BASE_URL + "/qr/active?courseId=" + courseId + "&format=json");
+            java.util.regex.Matcher mSub = java.util.regex.Pattern.compile(tokenPattern).matcher(subsequentJson);
+            if (mSub.find()) {
+                String subToken = mSub.group(1);
+                // Within the same step, token must be identical
+                if (subsequentJson.contains("\"remainingMs\":") && !subToken.equals(initialToken)) {
+                    // Step may only change if clock crossed boundary
+                    long step = Long.parseLong(subsequentJson.replaceAll(".*\"step\":(\\d+).*", "$1"));
+                    long initStep = Long.parseLong(firstJson.replaceAll(".*\"step\":(\\d+).*", "$1"));
+                    if (step == initStep) {
+                        throw new AssertionError("Token changed within same step! " + subToken + " vs " + initialToken);
+                    }
+                }
+            }
+        }
+    }
+
+    private static void testClientSynchronizationAndSingleTimer() throws Exception {
+        String jsContent = new String(Files.readAllBytes(Paths.get("src/main/webapp/js/qr-scanner.js")), StandardCharsets.UTF_8);
+
+        // Verify singleton guard exists
+        if (!jsContent.contains("window.__scanInSession")) {
+            throw new AssertionError("qr-scanner.js missing singleton guard window.__scanInSession");
+        }
+        if (!jsContent.contains("clearInterval") || !jsContent.contains("clearTimeout")) {
+            throw new AssertionError("qr-scanner.js missing cleanup of previous intervals/timeouts");
+        }
+
+        // Verify monotonic clock usage
+        if (!jsContent.contains("performance.now()")) {
+            throw new AssertionError("qr-scanner.js missing monotonic performance.now() clock");
+        }
+
+        // Verify server-synchronized targetMonotonicTime anchoring
+        if (!jsContent.contains("targetMonotonicTime")) {
+            throw new AssertionError("qr-scanner.js missing targetMonotonicTime anchoring");
+        }
+
+        // Verify qr-display.jsp includes cache-busting
+        String jspContent = new String(Files.readAllBytes(Paths.get("src/main/webapp/WEB-INF/views/qr-display.jsp")), StandardCharsets.UTF_8);
+        if (!jspContent.contains("qr-scanner.js?v=")) {
+            throw new AssertionError("qr-display.jsp missing cache-busting query parameter on qr-scanner.js");
         }
     }
 

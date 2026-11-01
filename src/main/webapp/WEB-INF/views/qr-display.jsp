@@ -6,6 +6,9 @@
     String scanUrl = (String) request.getAttribute("scanUrl");
     int sessionId = request.getAttribute("sessionId") != null ? (Integer) request.getAttribute("sessionId") : 0;
     int markedCount = request.getAttribute("markedCount") != null ? (Integer) request.getAttribute("markedCount") : 0;
+    int remainingSeconds = request.getAttribute("remainingSeconds") != null ? (Integer) request.getAttribute("remainingSeconds") : 7;
+    long remainingMs = request.getAttribute("remainingMs") != null ? (Long) request.getAttribute("remainingMs") : 7000L;
+    long nextRotationBoundary = request.getAttribute("nextRotationBoundary") != null ? (Long) request.getAttribute("nextRotationBoundary") : 0L;
 %>
 <!DOCTYPE html>
 <html lang="en">
@@ -53,7 +56,7 @@
             <!-- 7-Second Countdown Timer -->
             <div style="display: flex; align-items: center; justify-content: center; gap: 0.75rem; margin-bottom: 1.25rem;">
                 <span style="font-size: 0.95rem; font-weight: 600; color: #475569;">Token rotates in:</span>
-                <div id="qr-timer" class="timer-badge safe" style="font-size: 1.1rem; font-weight: 800; min-width: 52px; padding: 0.35rem 0.85rem; border-radius: 20px;">7s</div>
+                <div id="qr-timer" class="timer-badge safe" style="font-size: 1.1rem; font-weight: 800; min-width: 52px; padding: 0.35rem 0.85rem; border-radius: 20px;"><%= remainingSeconds %>s</div>
             </div>
 
             <!-- Dynamic QR Code Display -->
@@ -94,10 +97,10 @@
         <p>ScanIn &bull; Dynamic HMAC-SHA256 Token Rotates Every 7 Seconds &bull; Powered by Tomcat & MySQL</p>
     </footer>
 
-    <script src="${pageContext.request.contextPath}/js/qr-scanner.js"></script>
+    <script src="${pageContext.request.contextPath}/js/qr-scanner.js?v=<%= System.currentTimeMillis() %>"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            initDynamicQrSession(<%= course != null ? course.getId() : 0 %>, "<%= sessionToken %>", "<%= scanUrl %>", "<%= request.getAttribute("numericCode") != null ? request.getAttribute("numericCode") : "" %>", "${pageContext.request.contextPath}");
+            initDynamicQrSession(<%= course != null ? course.getId() : 0 %>, "<%= sessionToken %>", "<%= scanUrl %>", "<%= request.getAttribute("numericCode") != null ? request.getAttribute("numericCode") : "" %>", "${pageContext.request.contextPath}", <%= remainingMs %>, <%= nextRotationBoundary %>);
         });
 
         function copyToken() {

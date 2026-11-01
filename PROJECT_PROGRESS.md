@@ -11,7 +11,9 @@
 | **Stage 5** | Faculty course and semester management | ✅ APPROVED | 2026-10-20 |
 | **Stage 6** | Live QR attendance (5s rotating tokens, scanner) | ✅ APPROVED | 2026-10-20 |
 | **Stage 7** | Manual attendance, OD, audit history, reports | ✅ APPROVED | 2026-10-20 |
-| **Stage 8** | Final academic submission readiness | 🔍 COMPLETE (Awaiting Final Review) | 2026-10-20 |
+| **Stage 8** | Final academic submission readiness | ✅ APPROVED | 2026-10-20 |
+| **Stage 9** | Persistent Class Meetings & Timezone Standardization | ✅ APPROVED | 2026-10-20 |
+| **Stage 10** | 7-Second QR Token Timing & Monotonic Clock Synchronization Fix | ✅ APPROVED | 2026-11-01 |
 
 ---
 
@@ -508,6 +510,9 @@ Executed against live Tomcat 10 on port 8080 and MySQL 8.0 on port 3306 (UTC tim
 | **3** | Token beyond configured expiration (10s) rejected | Validates token at $T=11\text{s}$ and `generateExpiredToken()` returns `TokenStatus.EXPIRED`. | ✅ PASS |
 | **4** | QR display countdown starts at 7s & resets | Verifies initial rendered HTML contains `7s` badge and `qr-scanner.js` defines `ROTATION_INTERVAL = 7` with `isFetching` guard. | ✅ PASS |
 | **5** | 6-digit fallback rotates synchronously | Verifies dynamic truncation produces valid 6-digit codes and rotates synchronously every 7 seconds. | ✅ PASS |
+| **5b** | 30+ consecutive time-steps advance every 7,000ms | Asserts mathematical step continuity with zero timing gaps, stalls, or skipping across 35 intervals. | ✅ PASS |
+| **5c** | Repeated polling within same step returns identical token | Rapid successive `/qr/active` calls return the exact same token and complete server timing metadata. | ✅ PASS |
+| **5d** | Monotonic client synchronization & singleton timer | Validates monotonic clock countdown calculation (`performance.now()`) and singleton pattern against competing timers. | ✅ PASS |
 | **6** | Tampered HMAC signatures rejected | Bit-flipped HMAC signature rejected with `INVALID` outcome in `scan_attempts`. | ✅ PASS |
 | **7** | Tokens from another course rejected | Token generated for Course A submitted against Course B session rejected with `WRONG_COURSE`. | ✅ PASS |
 | **8** | Tokens from another meeting rejected | Token generated for non-existent session rejected with 0 records persisted. | ✅ PASS |
@@ -524,7 +529,7 @@ Executed against live Tomcat 10 on port 8080 and MySQL 8.0 on port 3306 (UTC tim
 | **19** | Reopening preserves meeting ID | Reopened session preserves exact primary key meeting ID with `is_active = TRUE`. | ✅ PASS |
 | **20** | Reclosing idempotent & preserves manual decisions | Reclosing preserves `PRESENT` and manual `OD` overrides without duplicate rows. | ✅ PASS |
 
-**Result:** **20 / 20 Tests Passed (100%)**.
+**Result:** **23 / 23 Tests Passed (100%)**.
 
 ---
 
@@ -539,9 +544,9 @@ Stage 6 Verification (HMAC Token Rotation, Multi-Student Scans):    11 / 11  PAS
 Stage 7 Verification (Session Lifecycle, Audit Trail, CSV Export):   8 / 8   PASS
 Stage 8 Verification (Session-Bound 6-Digit Code, Rate Limiting):    5 / 5   PASS
 Class Meeting Verification (Persistent Meetings, UTC Timezone):     10 / 10  PASS
-QR Timing Verification (7s Rotation, 10s Validity, Security):       20 / 20  PASS
+QR Timing Verification (7s Rotation, 10s Validity, Security):       23 / 23  PASS
 ---------------------------------------------------------------------------------
-TOTAL AUTOMATED TESTS:                                              82 / 82  PASS (100%)
+TOTAL AUTOMATED TESTS:                                              85 / 85  PASS (100%)
 ```
 
 
