@@ -15,6 +15,12 @@
 | **Stage 9** | Persistent Class Meetings & Timezone Standardization | ✅ APPROVED | 2026-10-20 |
 | **Stage 10** | 7-Second QR Token Timing & Monotonic Clock Synchronization Fix | ✅ APPROVED | 2026-11-01 |
 | **Stage 11** | Faculty Attendance Timestamp Display in Indian Standard Time (IST) | ✅ APPROVED | 2026-11-01 |
+| **Stage 12** | Planned-Session Lifecycle Architecture & Migration | ✅ APPROVED | 2026-11-01 |
+| **Stage 13** | Planned-Session Integration, Scanner, Timetable & Live Concurrency Audit | ✅ APPROVED | 2026-11-01 |
+| **Stage 14** | Comprehensive Security Remediation & Release Verification | ✅ APPROVED | 2026-11-01 |
+| **Stage 15** | Final Build, Packaging & Release Verification | ✅ APPROVED | 2026-11-01 |
+| **Stage 16** | Controlled Tomcat Deployment & Live HTTP Verification | ✅ APPROVED | 2026-11-01 |
+| **Stage 17** | Final Git Audit, Change Classification & Commit Preparation | ✅ APPROVED | 2026-11-01 |
 
 ---
 
@@ -612,6 +618,231 @@ Automated browser performance instrumentation executed via Chrome DevTools Proto
 | **7** | Live Faculty Report JSP and CSV export render IST | Authenticated GET requests to `/reports` and `/reports?format=csv` verified to render IST headers and values. | ✅ PASS |
 
 **Result:** **7 / 7 Tests Passed (100%)**.
+
+---
+
+## Stage 12: Planned-Session Lifecycle Architecture & Migration
+
+### 1. Problem Definition & Objectives
+- **Pre-existing Limitation:** Live QR sessions operated only on ad-hoc meetings created on-the-fly without tracking scheduled timetable curriculum sessions or automated reconciliation.
+- **Objective:** Introduce a structured planned-session lifecycle: `SCHEDULED` $\rightarrow$ `ACTIVE` $\rightarrow$ `COMPLETED` / `CANCELLED`, backed by database migrations and robust expiry math.
+
+### 2. Architecture & Implementation
+- **Schema Migration:** [`database/migration_stage12_planned_sessions.sql`](file:///C:/java_dbms_project/database/migration_stage12_planned_sessions.sql) and rollback script. Added `planned_sessions` table with status ENUM (`SCHEDULED`, `ACTIVE`, `COMPLETED`, `CANCELLED`), room, block durations, and Foreign Keys to courses/teachers.
+- **Domain Models & DAOs:**
+  - [`PlannedSession.java`](file:///C:/java_dbms_project/src/main/java/com/attendance/model/PlannedSession.java): Domain entity with lifecycle states and duration calculations.
+  - [`PlannedSessionDao.java`](file:///C:/java_dbms_project/src/main/java/com/attendance/dao/PlannedSessionDao.java): Lifecycle state transitions, meeting expiry calculations, and automated absentee reconciliation upon closure.
+- **Verification Evidence:** [`Stage12LifecycleVerificationTest.java`](file:///C:/java_dbms_project/src/test/java/com/attendance/Stage12LifecycleVerificationTest.java) — **10 / 10 Tests Passed (100%)**.
+
+---
+
+## Stage 13: Planned-Session Integration, Scanner, Timetable & Live Concurrency Audit
+
+### 1. Multi-Phase Implementation Summary
+- **Stage 13-C1 (Backend Contract):** Dynamic QR generation, HMAC signing, CSRF protection, and meeting expiry calculations. Verified via [`Stage13BackendContractTest.java`](file:///C:/java_dbms_project/src/test/java/com/attendance/Stage13BackendContractTest.java) (23/23 passed).
+- **Stage 13-C2 (Teacher UI & Scanner):** Teacher dashboard planned sessions list, activation modal, dynamic QR projector view, and fallback code derivation. Verified via [`Stage13PhaseC2ContractTest.java`](file:///C:/java_dbms_project/src/test/java/com/attendance/Stage13PhaseC2ContractTest.java) (19/19 passed).
+- **Stage 13-C3 (Student Timetable):** Student dashboard timetable integration displaying scheduled classes, live attendance state, and active scan triggers. Verified via [`Stage13PhaseC3ContractTest.java`](file:///C:/java_dbms_project/src/test/java/com/attendance/Stage13PhaseC3ContractTest.java) (18/18 passed).
+- **Stage 13-C4 (Attendance Roster & Lifecycle Hardening):** 
+  - Teacher session roster backend and frontend [`session-roster.js`](file:///C:/java_dbms_project/src/main/webapp/js/session-roster.js). Verified via [`Stage13PhaseC4Test.java`](file:///C:/java_dbms_project/src/test/java/com/attendance/Stage13PhaseC4Test.java) (25/25), [`Stage13PhaseC43Test.java`](file:///C:/java_dbms_project/src/test/java/com/attendance/Stage13PhaseC43Test.java) (37/37), and [`Stage13PhaseC44FrontendContractTest.java`](file:///C:/java_dbms_project/src/test/java/com/attendance/Stage13PhaseC44FrontendContractTest.java) (27/27).
+  - C4.6 consistency hardening: InnoDB row-level locking (`FOR UPDATE`) synchronizing scan attempts against teacher closure. Verified via [`Stage13PhaseC46Test.java`](file:///C:/java_dbms_project/src/test/java/com/attendance/Stage13PhaseC46Test.java) (16/16 passed).
+- **Stage 13-V (Live MySQL Concurrency Verification):** Provisioned isolated disposable database `attendance_test_db` with `attendance_test_user`. Executed 9 concurrent race-condition scenarios via `Stage13VLiveVerificationRunner.java` (**9 / 9 passed**). Zero contact with `attendance_db`.
+- **Stage 13-X1 & X2 (Build Packaging & Controlled Tomcat Smoke Test):** Recompiled all sources to candidate WAR (`3,225,858 bytes`, SHA-256 `C80AC9FB...`) and verified live HTTP 200 responses across all servlets and student/teacher workflows.
+- **Stage 13-Y (Final Security & Release Readiness Audit):** Identified 5 security vulnerabilities and 5 release integrity areas requiring formal remediation prior to production.
+
+---
+
+## Stage 14: Comprehensive Security Remediation & Release Verification
+
+### 1. Problem Resolution Matrix
+1. **Exposed Test DB Password:** Rotated `attendance_test_user`@`localhost` password to secure 32-character string. Old password verified rejected (`ERROR 1045`). Purged from scratch scripts and tests.
+2. **Hardcoded HMAC Secret:** Removed static secret in [`QrCodeUtil.java`](file:///C:/java_dbms_project/src/main/java/com/attendance/util/QrCodeUtil.java). Secret loaded dynamically from environment/properties; missing or invalid secret fails closed.
+3. **Unsafe DB Fallbacks:** Removed `root`/`root`/`attendance_db` defaults in [`DBConnection.java`](file:///C:/java_dbms_project/src/main/java/com/attendance/util/DBConnection.java). Throws `IllegalStateException` on missing DB_URL, DB_USER, or DB_PASSWORD. Zero occurrences of `attendance_db` remain.
+4. **Session Fixation Defense:** Added `request.changeSessionId()` upon login in [`SessionUtil.java`](file:///C:/java_dbms_project/src/main/java/com/attendance/util/SessionUtil.java) while preserving pre-login attributes (`pendingToken`, `csrfToken`).
+5. **SQL Error Disclosure:** Removed `UserDao.lastSqlError`. Replaced with `lastQueryHadDatabaseError` flag in [`UserDao.java`](file:///C:/java_dbms_project/src/main/java/com/attendance/dao/UserDao.java) and generic sanitized error in [`LoginServlet.java`](file:///C:/java_dbms_project/src/main/java/com/attendance/servlet/LoginServlet.java).
+6. **Session Cookie Security & Timeout:** Hardened [`web.xml`](file:///C:/java_dbms_project/src/main/webapp/WEB-INF/web.xml) and [`AppContextListener.java`](file:///C:/java_dbms_project/src/main/java/com/attendance/listener/AppContextListener.java) with `HttpOnly` unconditionally, dynamic `Secure` cookies for HTTPS, and 30-minute session timeout.
+7. **Historical Enrollment Retention:** Created additive migration [`migration_stage14_historical_enrollments.sql`](file:///C:/java_dbms_project/database/migration_stage14_historical_enrollments.sql) (`status ENUM('ACTIVE','DROPPED')`, `dropped_at`). Converted [`CourseDao.java`](file:///C:/java_dbms_project/src/main/java/com/attendance/dao/CourseDao.java) to soft-drop. Updated all active queries to filter `status='ACTIVE'`, while [`PlannedSessionDao.java`](file:///C:/java_dbms_project/src/main/java/com/attendance/dao/PlannedSessionDao.java) preserves completed session rosters.
+
+### 2. Verification Evidence
+- [`Stage14SecurityRemediationTest.java`](file:///C:/java_dbms_project/src/test/java/com/attendance/Stage14SecurityRemediationTest.java): **15 / 15 Tests Passed (100%)**.
+- Full Offline Regression: **190 / 190 Tests Passed (100%)** across 9 suites.
+- Live MySQL Suite against `attendance_test_db`: **9 / 9 Scenarios Passed (100%)**.
+- Comprehensive Evidence Artifact: [`Stage14_Security_Remediation_Report.md`](file:///C:/java_dbms_project/Stage14_Security_Remediation_Report.md).
+
+---
+
+## Stage 15: Final Build, Packaging & Release Verification
+
+### 1. Scope & Execution
+- **Exclusively for source audit, cryptographic entropy hardening, clean candidate packaging, and artifact verification.**
+- **Strict Invariants Preserved:** Database untouched (zero connections opened); Tomcat untouched (zero restarts); original candidate WARs untouched; Git working tree uncommitted.
+
+### 2. Cryptographic Entropy Hardening
+- Enhanced [`QrCodeUtil.java`](file:///C:/java_dbms_project/src/main/java/com/attendance/util/QrCodeUtil.java) `validateSecret()` to verify:
+  - Minimum raw byte length ($\ge 32$ bytes / 256 bits).
+  - Character/byte diversity ($\ge 10$ distinct byte values).
+  - Shannon entropy threshold ($H \ge 2.5$ bits/byte).
+  - Native decoding of 64-char Hex and 44-char Base64 secrets.
+  - Low-entropy strings (e.g. 32 repetitions of `'a'`) fail closed with `IllegalStateException`.
+  - Secret strings are never logged or leaked in exception messages.
+
+### 3. Clean Packaging Hygiene & Test Separation
+- Built candidate archive to [`dist/attendance-stage15-candidate.war`](file:///C:/java_dbms_project/dist/attendance-stage15-candidate.war) via clean staging directory `build/staging-war/`.
+- **Zero test classes packaged:** Eliminated the 27 test classes (~165 KB) that had leaked into the Stage 13-X1 build.
+- **Bytecode Inspection:** Java 21 bytecode verified (`major version: 65`). Bytecode confirmed absence of `UserDao.lastSqlError`, absence of DB fallbacks, and presence of HMAC entropy checks.
+
+### 4. Side-by-Side Artifact Ledger
+
+| Artifact | Path | Size (Bytes) | SHA-256 Hash | Provenance / Status |
+|---|---|---:|---|---|
+| **Original dist WAR** | `dist\attendance.war` | 3,225,858 | `C80AC9FBDAFBC326E3AADACACC720D93C105B40D460848385C0A10A608673E33` | Stage 13-X1 build (Preserved untouched) |
+| **Original Tomcat WAR** | `tomcat\webapps\attendance.war` | 3,225,858 | `C80AC9FBDAFBC326E3AADACACC720D93C105B40D460848385C0A10A608673E33` | Stage 13-X1 build (Preserved untouched) |
+| **Verified dist Backup** | `dist\backups\attendance-dist-pre-stage15-20261101_1950.war` | 3,225,858 | `C80AC9FBDAFBC326E3AADACACC720D93C105B40D460848385C0A10A608673E33` | Byte-identical pre-build backup |
+| **Verified Tomcat Backup** | `dist\backups\attendance-tomcat-pre-stage15-20261101_1950.war` | 3,225,858 | `C80AC9FBDAFBC326E3AADACACC720D93C105B40D460848385C0A10A608673E33` | Byte-identical pre-build backup |
+| **Stage 15 Candidate WAR** | `dist\attendance-stage15-candidate.war` | 3,061,197 | `3637897BA009A476F1C793B5A3406F08CC6390AD2F5EF7990BB63BEE885B922B` | Fresh Stage 15 Release Candidate |
+
+### 5. Regression Test Results (200 / 200 Passed)
+- All 10 test suites executed with exit code 0:
+  1. `Stage13PhaseC46Test`: 16/16 Passed
+  2. `Stage13PhaseC44FrontendContractTest`: 27/27 Passed
+  3. `Stage13PhaseC43Test`: 37/37 Passed
+  4. `Stage13PhaseC4Test`: 25/25 Passed
+  5. `Stage13BackendContractTest`: 23/23 Passed
+  6. `Stage13PhaseC2ContractTest`: 19/19 Passed
+  7. `Stage13PhaseC3ContractTest`: 18/18 Passed
+  8. `Stage12LifecycleVerificationTest`: 10/10 Passed
+  9. `Stage14SecurityRemediationTest`: 15/15 Passed
+  10. `Stage15ReleaseVerificationTest`: 10/10 Passed
+  **TOTAL: 200 / 200 Tests Passed (100%)**.
+
+### 6. Verdict: **PASS — Stage 15 candidate built and verified**
+Comprehensive Evidence Report: [`Stage15_Build_And_Release_Verification_Report.md`](file:///C:/java_dbms_project/Stage15_Build_And_Release_Verification_Report.md).  
+**Stop Condition Met:** Authorized for Stage 16 controlled deployment and live HTTP smoke verification.
+
+---
+
+## Stage 16 — Controlled Tomcat Deployment & Live HTTP Verification Report
+
+### 1. Verification Context & Safety Adherence
+- **Candidate Archive:** [`dist/attendance-stage15-candidate.war`](file:///C:/java_dbms_project/dist/attendance-stage15-candidate.war) (SHA-256: `3637897BA009A476F1C793B5A3406F08CC6390AD2F5EF7990BB63BEE885B922B`).
+- **Baseline WAR Invariance:** Both `dist/attendance.war` and `tomcat/webapps/attendance.war` remained completely untouched with verified SHA-256 `C80AC9FBDAFBC326E3AADACACC720D93C105B40D460848385C0A10A608673E33`.
+- **Target Schema & Account:** Exclusively executed against isolated `attendance_test_db` with `attendance_test_user`@`localhost`. Protected schema `attendance_db` was never accessed or queried.
+- **Git Baseline:** Head remained unchanged at `9b59559e0ef5c5a5e3e29be1eaf131fad8442d0b`.
+
+### 2. Controlled Deployment Execution
+- Mounted candidate archive to Tomcat context path `/attendance` via `tomcat/conf/Catalina/localhost/attendance.xml`.
+- Preserved existing expanded directory backup `attendance.dir.bak_20261101_pre_stage16`.
+- Process-level environment variables dynamically passed: `DB_URL`, `DB_USER`, `DB_PASSWORD`, `QR_HMAC_SECRET` (entropy validated), `SESSION_COOKIE_SECURE=false`. Zero plaintext credentials leaked.
+- Tomcat 10.1.20 initialized cleanly on port 8080.
+
+### 3. Live HTTP Smoke Test Results (25 / 25 Passed — 100%)
+- **INIT-01 & INIT-02:** Login view (200 OK) and static assets (`style.css`) delivered cleanly.
+- **COOKIE-01:** Session cookie security verified (`HttpOnly; Path=/attendance`).
+- **AUTH-01 & AUTH-02:** Credential enumeration protection verified (sanitized generic error "Invalid email or password"; zero SQL/stack disclosure).
+- **AUTH-03:** Live session fixation protection verified via `request.changeSessionId()` upon login.
+- **AUTH-04 & AUTH-05:** Student role-based routing (302 to `/student/dashboard`) and logout session invalidation verified.
+- **RBAC-01 to RBAC-03:** Role boundaries strictly enforced (Unauthenticated $\rightarrow$ 302 to `/login`; Student $\rightarrow$ Faculty dashboard 403 Forbidden; Faculty $\rightarrow$ Student dashboard 403 Forbidden).
+- **CSRF-01 & CSRF-02:** Eager token generation in views; state-changing requests without CSRF token rejected with 403 Forbidden.
+- **PLAN-01 & PLAN-02:** Planned session details (`CS1601`, `Lab 16A`) rendered in faculty dashboard and student timetable.
+- **QR-01:** Dynamic QR token and 6-digit numeric fallback generated successfully.
+- **SCAN-01 to SCAN-04:** Enrolled student scan marked `PRESENT` in DB; duplicate scan rejected; unenrolled student rejected; expired token rejected.
+- **CLOSE-01:** Faculty session closure deactivated QR, marked planned session `COMPLETED`, and reconciled absentees to `ABSENT` in DB.
+- **HIST-01 to HIST-04:** Historical roster accurately lists Present and Absent students; Stage 14 soft-drop retention verified (student dropped *after* closure retained; students dropped *before* or enrolled *after* closure excluded).
+
+### 4. Real-Browser Automation Results (Google Chrome 156 via CDP)
+- Connected to Chrome 156.0.8078.74 via native Chrome DevTools Protocol (CDP) WebSocket.
+- Observed dynamic 7-second QR token rotation live over 8.0s (Code 1: `326580` $\rightarrow$ Code 2: `032520`).
+- Verified student timetable rendering, camera scanner viewfinder DOM, and manual 6-digit fallback entry UI.
+- Verified faculty roster modal accessibility: backdrop click and keyboard `Escape` dismiss.
+- Verified responsive layout across Desktop (1920x1080) and Mobile (375x667).
+- Verified browser console error telemetry: 0 uncaught JavaScript runtime errors.
+- **Documented Limitation:** Camera Hardware Physical Stream marked as `NOT TESTED` due to absence of physical webcam hardware in headless container environment.
+
+### 5. Post-Verification Hygiene & Cleanup
+- 100% of synthetic test fixtures deleted from `attendance_test_db`.
+- Zero residual records remaining in `users`, `teachers`, `students`, `courses`, `enrollments`, `planned_sessions`, `qr_sessions`, and `attendance`.
+- Tomcat stopped cleanly; port 8080 released.
+- Checksums re-verified: `dist/attendance.war`, `tomcat/webapps/attendance.war`, and `dist/attendance-stage15-candidate.war` intact.
+
+### 6. Side-by-Side Verification Artifact Ledger
+
+| Artifact | Path | Size (Bytes) | SHA-256 Hash | Status |
+|---|---|---:|---|---|
+| **Original dist WAR** | `dist\attendance.war` | 3,225,858 | `C80AC9FBDAFBC326E3AADACACC720D93C105B40D460848385C0A10A608673E33` | UNCHANGED |
+| **Original Tomcat WAR** | `tomcat\webapps\attendance.war` | 3,225,858 | `C80AC9FBDAFBC326E3AADACACC720D93C105B40D460848385C0A10A608673E33` | UNCHANGED |
+| **Stage 15 Candidate WAR** | `dist\attendance-stage15-candidate.war` | 3,061,197 | `3637897BA009A476F1C793B5A3406F08CC6390AD2F5EF7990BB63BEE885B922B` | VERIFIED & DEPLOYED |
+
+### 7. Verdict: **CONDITIONAL PASS — HTTP deployment verified with documented limitations (physical camera hardware limitation)**
+Comprehensive Evidence Report: [`Stage16_Controlled_Deployment_And_HTTP_Verification_Report.md`](file:///C:/java_dbms_project/Stage16_Controlled_Deployment_And_HTTP_Verification_Report.md).
+
+---
+
+## Stage 17 — Final Git Audit, Change Classification & Commit Preparation Report
+
+### 1. Verification Context & Baseline Invariance
+- **Working Tree Branch:** `main`
+- **Git HEAD SHA:** `9b59559e0ef5c5a5e3e29be1eaf131fad8442d0b` (Unaltered baseline).
+- **Execution Mode:** Read-only audit and commit plan formulation. Zero files staged, zero files committed, zero files deleted or reset.
+- **File Counts:** 26 tracked modified files, 27 untracked files/directories, 0 deleted files, 0 renamed files, 0 staged changes.
+
+### 2. Secret Exposure & Security Audit (100% Clean)
+- **Database Credentials:** Verified zero hardcoded passwords or default credentials (`root`/`root`/`attendance_db` removed in Stage 14; fail-closed `IllegalStateException` on missing `DB_URL`, `DB_USER`, `DB_PASSWORD`).
+- **HMAC Secrets:** Verified zero hardcoded keys in `QrCodeUtil.java`; dynamic environment loading enforced with Shannon entropy $H \ge 2.5$ and length $\ge 32$ bits/byte. Ephemeral synthetic keys used in tests cleared in `finally` blocks.
+- **Candidate WAR Hygiene:** Verified [`dist/attendance-stage15-candidate.war`](file:///C:/java_dbms_project/dist/attendance-stage15-candidate.war) entry-by-entry: 0 test classes, 0 `.env` files, 0 plaintext secret configurations.
+- **Environment Isolation:** Local scratch credentials (`.attendance_test_env`) reside completely outside Git workspace.
+
+### 3. Change Classification Ledger
+
+| Classification | Count | Key Components |
+|---|---:|---|
+| **A. Application Source** | 20 | DAOs (`AttendanceDao`, `PlannedSessionDao`, `QrSessionDao`, `UserDao`, etc.), Models (`PlannedSession`, `SessionRosterItem`, `SessionRosterMetrics`), Servlets (`QrGenerateServlet`, `QrScanServlet`, `LoginServlet`, etc.), Utilities (`DBConnection`, `QrCodeUtil`, `SessionUtil`), Listener (`AppContextListener`) |
+| **B. Database Migrations** | 4 | `migration_stage12_planned_sessions.sql`, `migration_stage14_historical_enrollments.sql`, and corresponding rollback scripts |
+| **C. Automated Tests** | 10 | 10 unit and contract test suites in `src/test/java/com/attendance/` covering 200 unit and regression tests (100% pass) |
+| **D. Frontend Assets** | 8 | JSPs (`qr-display.jsp`, `qr-scan.jsp`, `teacher-dashboard.jsp`, `student-dashboard.jsp`), `style.css`, `qr-scanner.js`, `session-roster.js`, `web.xml` |
+| **E. Documentation** | 5 | `PROJECT_PROGRESS.md`, `Stage14_Security_Remediation_Report.md`, `Stage15_Build_And_Release_Verification_Report.md`, `Stage16_Controlled_Deployment_And_HTTP_Verification_Report.md`, `Stage17_Git_Audit_And_Commit_Preparation_Report.md` |
+| **F. Local Generated Artifacts** | 6 | `build/staging-war/`, `dist/attendance-stage15-candidate.war`, `dist/backups/`, `tomcat/webapps/*.bak*`, tracked WAR binaries |
+
+### 4. Proposed 5-Stage Atomic Commit Plan
+
+```mermaid
+flowchart LR
+    C1["Commit 1: Database Migrations<br/>(Stage 12 & 14 SQL)"] --> C2["Commit 2: Core Models & DAOs<br/>(Lifecycle & ACID Concurrency)"]
+    C2 --> C3["Commit 3: Security Remediation<br/>(HMAC, Fixation, CSRF, Fail-Closed)"]
+    C3 --> C4["Commit 4: Web UI & Servlets<br/>(Timetable, Scanner, Roster)"]
+    C4 --> C5["Commit 5: Tests & Milestone Docs<br/>(200 Tests & Stage Reports)"]
+```
+
+1. **Commit 1: Database Schema & Migrations (`feat(db)`)**
+   - Files: `database/migration_stage12_planned_sessions.sql`, `database/migration_stage14_historical_enrollments.sql`, `database/rollback_stage12_planned_sessions.sql`, `database/rollback_stage14_historical_enrollments.sql`
+2. **Commit 2: Core Domain Models & DAOs (`feat(backend)`)**
+   - Files: `src/main/java/com/attendance/model/PlannedSession.java`, `QrSession.java`, `SessionRosterItem.java`, `SessionRosterMetrics.java`, `AttendanceDao.java`, `CourseDao.java`, `CourseScheduleDao.java`, `PlannedSessionDao.java`, `QrSessionDao.java`, `StudentDao.java`
+3. **Commit 3: Security Remediation & Runtime Configuration (`security`)**
+   - Files: `src/main/java/com/attendance/util/DBConnection.java`, `QrCodeUtil.java`, `SessionUtil.java`, `UserDao.java`, `AppContextListener.java`, `LoginServlet.java`, `web.xml`
+4. **Commit 4: Web Servlets, Frontend Views, Styling & Scanner Integration (`feat(frontend)`)**
+   - Files: `QrGenerateServlet.java`, `QrScanServlet.java`, `StudentDashboardServlet.java`, `TeacherDashboardServlet.java`, `qr-display.jsp`, `qr-scan.jsp`, `student-dashboard.jsp`, `teacher-dashboard.jsp`, `style.css`, `qr-scanner.js`, `session-roster.js`
+5. **Commit 5: Automated Verification Test Suites & Milestone Documentation (`test & docs`)**
+   - Files: All 10 test suites (`src/test/java/com/attendance/*.java`), `PROJECT_PROGRESS.md`, and Stage 14, 15, 16, 17 audit reports.
+
+### 5. Local Exclusions
+The following artifacts remain local and are excluded from commits:
+- `build/` (and compiled staging directory)
+- `dist/attendance-stage15-candidate.war`
+- `dist/backups/attendance-dist-pre-stage15-20261101_1950.war`
+- `dist/backups/attendance-tomcat-pre-stage15-20261101_1950.war`
+- `tomcat/webapps/attendance.war.bak_20261101_175124`
+- Existing tracked WAR binaries (`dist/attendance.war`, `tomcat/webapps/attendance.war` unstaged)
+
+### 6. Side-by-Side Artifact Ledger
+
+| Artifact | Path | Size (Bytes) | SHA-256 Hash | Status |
+|---|---|---:|---|---|
+| **Original dist WAR** | `dist\attendance.war` | 3,225,858 | `C80AC9FBDAFBC326E3AADACACC720D93C105B40D460848385C0A10A608673E33` | UNCHANGED |
+| **Original Tomcat WAR** | `tomcat\webapps\attendance.war` | 3,225,858 | `C80AC9FBDAFBC326E3AADACACC720D93C105B40D460848385C0A10A608673E33` | UNCHANGED |
+| **Stage 15 Candidate WAR** | `dist\attendance-stage15-candidate.war` | 3,061,197 | `3637897BA009A476F1C793B5A3406F08CC6390AD2F5EF7990BB63BEE885B922B` | VERIFIED CANDIDATE |
+
+### 7. Verdict: **PASS — Repository audited and ready for commit review**
+Comprehensive Evidence Report: [`Stage17_Git_Audit_And_Commit_Preparation_Report.md`](file:///C:/java_dbms_project/Stage17_Git_Audit_And_Commit_Preparation_Report.md).
+
+
 
 
 
