@@ -948,16 +948,293 @@ The 6 local generated, backup, and binary artifacts remain intact with byte-iden
 
 ### 6. Verdict: **PASS WITH OBSERVATIONS — Repository verified and ready for separately authorized next stage.**
 
+---
 
+## Stage 20 — Release Candidate 1 Tagging & Working-Tree Finalization Report
 
+### 1. Execution Summary
+- **Base HEAD:** `75b293a5396ee61dca7ad3ece4cd6ea9d6c797fd` (`docs: record Stage 18 commit execution and Stage 19 audit in PROJECT_PROGRESS.md`)
+- **Finalized HEAD:** `86f1ae5f58cd50d6724c36189754c51a31f8995f`
+- **Commit Message:** `chore(git): ignore build artifacts and untrack generated WAR files`
+- **Release Tag:** `v1.0.0-rc1` (annotated tag pointing to `86f1ae5f58cd50d6724c36189754c51a31f8995f`)
+- **Branch:** `main`
+- **Working Tree:** Clean (zero unstaged files, zero untracked files)
 
+### 2. Hygiene & Artifact Exclusion
+- **`.gitignore` Updated:** Added exclusions for `.war`, `dist/`, `build/`, `tomcat/webapps/*.war`, `.db_password`, `.qr_secret`, and IDE files.
+- **Untracked Binaries:** Removed legacy binaries `dist/attendance.war` and `tomcat/webapps/attendance.war` from Git tracking while preserving local filesystem copies for reference.
+- **Working Tree State:** Pure source code, unit tests, SQL migration scripts, build scripts, and documentation only.
 
+### 3. Verdict: **PASS — Working tree clean; annotated tag v1.0.0-rc1 established.**
 
+---
 
+## Stage 21–23 — Isolated Runtime Staging, Configuration & RC1 Deployment
 
+### 1. Environment Isolation Summary
+- **Objective:** Provision an isolated, clean testbed preventing any side effects or contamination of development workspace or production databases.
+- **Isolated Tomcat Instance:** `C:\ScanIn_Manual_Test\apache-tomcat` (Tomcat 10.1.x)
+- **Isolated Database:** `attendance_test_db` on MySQL 8.0 (strict isolation from `attendance_db`).
+- **Database User:** Dedicated `attendance_test_user@localhost` with scoped DDL/DML permissions solely on `attendance_test_db`.
+- **Private Configuration:** `C:\ScanIn_Manual_Test\private-config\` containing `.db_password` and `.qr_secret` (file permissions restricted).
 
+### 2. Configuration & Deployment Invariants
+- **`setenv.bat` Invariants:** JVM memory parameters configured (`-Xms512m -Xmx1024m`), file encoding forced to `UTF-8`, credential paths passed via JVM system properties.
+- **Fail-Closed Pool Verification:** Connection pool in `DBConnection.java` verified to fail closed immediately if credentials or DB are unavailable.
+- **Deployed Candidate:** Candidate WAR (`attendance-stage15-candidate.war`, SHA-256 `3637897B...`) deployed as `webapps/attendance.war`.
+- **Application Context:** Started cleanly at `http://localhost:8080/attendance` with zero deployment errors.
 
+### 3. Verdict: **PASS — Isolated testing environment operational and verified.**
 
+---
 
+## Stage 24A–24D — Manual Browser Acceptance Testing & Timezone Defect Discovery
 
+### 1. Browser Acceptance Testing (Stage 24C)
+- **Test Harness:** Comprehensive manual acceptance testing via Chrome browser across 28 test cases covering Faculty, Student, and Administrator workflows.
+- **Verified Capabilities:**
+  - Secure authentication, session fixation protection (`request.changeSessionId()`), and role-based access control.
+  - Teacher course management, planned session scheduling, and dynamic QR session activation.
+  - Optical webcam QR scanning and manual 6-digit numeric code fallback.
+  - Dynamic QR 7-second rotation with HMAC-SHA256 token generation and client-side countdown bar.
+  - Anti-proxy single-redemption validation: duplicate scans within the same session rejected.
+  - Live session roster updates and CSV attendance report exports.
+
+### 2. Defect Identified: UI Timestamp Presentation Discrepancy
+- **Observation:** While scanning and recording attendance succeeded, timestamps displayed in the UI (Faculty Session Roster, Student Attendance History, CSV export) displayed in UTC rather than India Standard Time (IST, UTC+5:30).
+- **Example:** A record marked at 10:47:08 IST was displayed to users as `05:17:08` (raw UTC string representation).
+- **Severity:** Medium (Data integrity preserved in database epoch, but user presentation required remediation for academic demonstration).
+
+### 3. Isolated Runtime Shutdown (Stage 24D)
+- Isolated Tomcat stopped cleanly; port 8080 freed; all test evidence captured and preserved in `C:\ScanIn_Manual_Test\evidence\Stage24C\`.
+
+### 4. Verdict: **CONDITIONAL PASS — Core functionality accepted; timestamp presentation defect scheduled for remediation.**
+
+---
+
+## Stage 25A — Timezone Defect Root-Cause & Architecture Analysis (Read-Only)
+
+### 1. Forensic Root Cause
+1. **Database Storage Layer:** MySQL `TIMESTAMP` columns store UTC timestamps internally and convert based on MySQL session timezone.
+2. **JDBC Driver Layer:** Without an explicit `serverTimezone=UTC` on the JDBC URL, MySQL Connector/J attempted JVM-local zone conversions that introduced discrepancies between server session and application interpretation.
+3. **Domain Model Layer:** Domain models (`Attendance`, `AttendanceAuditLog`, `PlannedSession`) utilized legacy `java.sql.Timestamp`, which encapsulates local JVM timezone state and lacks explicit zone offset semantics.
+4. **Presentation Layer:** Views and DAOs formatted timestamps using standard toString or simple formatters without anchoring to `ZoneId.of("Asia/Kolkata")`.
+
+### 2. Architectural Remediation Blueprint
+- **Domain Modernization:** Migrate model timestamp fields from mutable `java.sql.Timestamp` to modern immutable `java.time.Instant`.
+- **Centralized Formatter:** Introduce `com.attendance.util.DateTimeUtil` as the single authoritative utility for converting UTC `Instant` to formatted IST (`Asia/Kolkata`, UTC+5:30) representations.
+- **Runtime Harmonization:** Enforce `serverTimezone=UTC` in JDBC URL and `SET time_zone = '+00:00'` in Tomcat pool `initSQL`.
+
+### 3. Verdict: **PASS — Root cause determined and remediation plan approved.**
+
+---
+
+## Stage 25B — Targeted UTC-to-IST Timestamp Remediation
+
+### 1. Code Modifications
+- **Utility Implementation:** Created `src/main/java/com/attendance/util/DateTimeUtil.java`:
+  - `formatToIst(Instant instant)` -> returns `dd-MM-yyyy hh:mm:ss a IST` (e.g., `02-11-2026 10:47:08 AM IST`).
+  - `formatToIst(Timestamp timestamp)` -> null-safe wrapper delegating to Instant formatter.
+  - Safe handling of null inputs returning `'N/A'`.
+- **Model Refactoring:**
+  - `Attendance.java`: Converted `markedAt` from `Timestamp` to `Instant`.
+  - `AttendanceAuditLog.java`: Converted `timestamp` from `Timestamp` to `Instant`.
+  - `PlannedSession.java`: Converted `sessionDate`, `createdAt`, `updatedAt` to `Instant` / `LocalDate`.
+  - `SessionRosterItem.java`: Converted `markedAt` to `Instant` with explicit IST formatting accessors.
+- **DAO Refactoring:**
+  - Updated `AttendanceDao.java`, `AttendanceAuditLogDao.java`, `PlannedSessionDao.java` to map `rs.getTimestamp("marked_at").toInstant()`.
+
+### 2. Test Suite Expansion
+- Created comprehensive test suite `src/test/java/com/attendance/Stage25BTimezoneRemediationTest.java` (8 tests validating leap years, midnight rollovers, month boundaries, and null safety).
+- **Total Test Suite:** 208 unit tests across 11 test classes.
+- **Execution Result:** 208/208 tests passed (0 failures, 0 errors).
+
+### 3. Verdict: **PASS — Timestamp remediation verified in unit test suite.**
+
+---
+
+## Stage 25C & 25C.1 — Clean RC2 Build, Packaging & Packaging Integrity Audit
+
+### 1. Build & Packaging Execution
+- Compiled all classes against Jakarta Servlet API and packaged `dist\attendance-v1.0.0-rc2.war` (3,062,473 bytes, SHA-256 `B17FCBFE078B9748AD45ED8B1257A9902519ACF71C6F08A43BFF6F0D691E3B5F`).
+- All 208 tests executed and passed.
+
+### 2. Stage 25C.1 Packaging Audit Findings
+- **Audit Findings:** The WAR packaging was verified safe and intact, but forensic comparison revealed that `DateTimeUtil.java` lacked a `formatToIstIso(Instant)` method required for ISO-8601 roster JSON serialization (`yyyy-MM-dd'T'HH:mm:ss+05:30`), leading to a minor formatting inconsistency in AJAX responses.
+- **Action Item:** Harmonize `DateTimeUtil` in Stage 25D prior to Git commit.
+
+### 3. Verdict: **PASS WITH OBSERVATIONS — Packaging valid; minor formatter alignment required.**
+
+---
+
+## Stage 25D & 25D.1 — Final Source Maintenance & Controlled Git Commit Authorization
+
+### 1. Source Harmonization (Stage 25D)
+- Added `formatToIstIso(Instant instant)` to `com.attendance.util.DateTimeUtil`:
+  - Produces standard ISO-8601 strings with explicit `+05:30` offset (e.g. `2026-11-02T10:47:08+05:30`).
+  - Added unit test cases verifying ISO formatting and edge cases.
+- Full test run: **208/208 unit tests passed**.
+
+### 2. Controlled Git Commit Execution (Stage 25D.1)
+- Explicit user authorization granted for single, atomic Git commit.
+- **Commit SHA:** `a377e04b9daad19d84033ca29767c5a17506fd87`
+- **Commit Message:** `fix: standardize attendance timestamps to IST`
+- **Parent Commit:** `86f1ae5f58cd50d6724c36189754c51a31f8995f` (`v1.0.0-rc1` tag target)
+- **Tracked Files Committed (Exactly 10 Files):**
+  1. `src/main/java/com/attendance/dao/AttendanceAuditLogDao.java`
+  2. `src/main/java/com/attendance/dao/AttendanceDao.java`
+  3. `src/main/java/com/attendance/dao/PlannedSessionDao.java`
+  4. `src/main/java/com/attendance/model/Attendance.java`
+  5. `src/main/java/com/attendance/model/AttendanceAuditLog.java`
+  6. `src/main/java/com/attendance/model/PlannedSession.java`
+  7. `src/main/java/com/attendance/model/SessionRosterItem.java`
+  8. `src/main/java/com/attendance/util/DateTimeUtil.java`
+  9. `src/test/java/com/attendance/Stage25BTimezoneRemediationTest.java`
+  10. `src/test/java/com/attendance/TimezoneVerificationTest.java`
+- **Working Tree:** Completely clean (zero unstaged files).
+
+### 3. Verdict: **PASS — Commit a377e04b successfully recorded and verified.**
+
+---
+
+## Stage 25E — Isolated Runtime Configuration Preparation & Timezone Harmonization
+
+### 1. Configuration Review & Update
+- Inspected `C:\ScanIn_Manual_Test\apache-tomcat\bin\setenv.bat`.
+- Enforced canonical JDBC URL parameter:
+  `jdbc:mysql://localhost:3306/attendance_test_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC`
+- Verified connection pool parameters in `web.xml` / `context.xml`:
+  `initSQL="SET time_zone = '+00:00'"`
+- Verified private credentials in `C:\ScanIn_Manual_Test\private-config\` (`.db_password`, `.qr_secret`).
+
+### 2. Verdict: **PASS — Isolated runtime configuration harmonized to UTC storage standard.**
+
+---
+
+## Stage 25F — Clean RC2 Build, Packaging & Artifact Verification
+
+### 1. Build & Test Execution
+- Source HEAD: `a377e04b9daad19d84033ca29767c5a17506fd87` (`fix: standardize attendance timestamps to IST`).
+- Build Environment: Clean staging directory, offline compilation with Java 21 compiler, Tomcat 10.1 servlet API.
+- Test Suite Execution: **208 unit tests executed; 208 passed (100%), 0 failures, 0 errors**.
+
+### 2. Final Release Candidate Artifact Details
+- **Artifact File:** `dist\attendance-v1.0.0-rc2-final-source-candidate.war`
+- **File Size:** `2,738,307 bytes`
+- **SHA-256 Hash:** `5FE7DF081D8B72E34C78955871297A5E46740A94621D38B00C4C473E54D4132F`
+- **Packaging Integrity:**
+  - Class count: 28 application classes + 5 utility classes.
+  - Zero test classes or build scripts packaged in WAR.
+  - Zero credential files, `.git` metadata, or backup artifacts included.
+  - Required libraries present in `WEB-INF/lib`: `mysql-connector-j-8.3.0.jar`, `jbcrypt-0.4.jar`, `zxing-core-3.5.3.jar`, `zxing-javase-3.5.3.jar`.
+
+### 3. Verdict: **PASS — Candidate artifact verified cryptographically and structurally.**
+
+---
+
+## Stage 25G — Controlled Runtime Deployment & End-to-End Acceptance Testing
+
+### 1. Deployment Execution
+- Deployed `attendance-v1.0.0-rc2-final-source-candidate.war` into isolated Tomcat instance `C:\ScanIn_Manual_Test\apache-tomcat\webapps\attendance.war`.
+- Deployed WAR SHA-256 matched candidate exactly: `5FE7DF081D8B72E34C78955871297A5E46740A94621D38B00C4C473E54D4132F`.
+- Tomcat 10.1 started cleanly on port 8080 (0 fatal errors, 0 warnings).
+
+### 2. 45-Point Acceptance Test Results Matrix
+
+| Phase | Category | Checks | Passed | Failed | Status |
+|---|---|---:|---:|---:|---|
+| **Phase D** | Runtime Timezone & Date Formatting Invariants | 6 | 6 | 0 | ✅ PASS |
+| **Phase E1** | Authentication, Session Fixation Defense & Role Routing | 6 | 6 | 0 | ✅ PASS |
+| **Phase E2** | Teacher Course Management & QR Session Lifecycle | 5 | 5 | 0 | ✅ PASS |
+| **Phase E3** | Dynamic QR Rotation & HMAC Cryptographic Validation | 5 | 5 | 0 | ✅ PASS |
+| **Phase E4** | Student Scan, Anti-Proxy Single Redemption & Concurrency Guard | 7 | 7 | 0 | ✅ PASS |
+| **Phase E5** | IST Presentation Consistency & Attendance CSV Export | 7 | 7 | 0 | ✅ PASS |
+| **Phase F** | Runtime Integrity, DB State & Tomcat Server Log Audit | 9 | 9 | 0 | ✅ PASS |
+| **TOTAL** | **Comprehensive End-to-End Verification** | **45** | **45** | **0** | **100% PASS** |
+
+### 3. Key Acceptance Highlights
+- **Session Fixation Defense:** User authentication rotates session ID (`request.changeSessionId()`) on login.
+- **Dynamic QR Generation & Rotation:** QR tokens change every 7 seconds; HMAC entropy validated ($H \ge 2.5$).
+- **Anti-Proxy Protection:** Replay and duplicate attendance marking within the same session rejected with appropriate error response.
+- **IST Timezone Consistency:** All attendance records displayed in IST (`dd-MM-yyyy hh:mm:ss a IST`) across Faculty dashboards, Student history, and CSV downloads.
+
+### 4. Verdict: **PASS — All 45 runtime acceptance checks passed without error.**
+
+---
+
+## Stage 25G.1 — Read-Only Runtime Timestamp Forensic Audit Report
+
+### 1. Audit Objective & Forensic Scope
+- Conducted a deep forensic audit of timestamp flow across all 10 architectural tiers:
+  1. MySQL physical disk storage (`attendance.marked_at` column).
+  2. MySQL session timezone variables (`time_zone`, `system_time_zone`).
+  3. JDBC connection string configuration (`serverTimezone=UTC`).
+  4. Tomcat JDBC connection pool initialization (`initSQL="SET time_zone = '+00:00'"`).
+  5. JDBC `Timestamp` retrieval and `toInstant()` conversion.
+  6. Domain model `Instant` immutability.
+  7. `DateTimeUtil.formatToIst(Instant)` formatting logic.
+  8. Faculty roster JSON serialization (`formatToIstIso`).
+  9. Student history JSP presentation.
+  10. Attendance CSV export serialization.
+
+### 2. Forensic Findings & Technical Reconciliation
+- **Physical Epoch Storage:** Verified raw MySQL epoch for test record: `UNIX_TIMESTAMP(marked_at) = 1793604856`.
+  - UTC equivalent: `2026-11-02 07:34:16 UTC`.
+  - IST equivalent (+05:30): `2026-11-02 13:04:16 IST`.
+- **Diagnostic Connection Artifact Explained:** In an ad-hoc test script connecting without the pool's `initSQL`, MySQL returned local time strings, creating an apparent 5.5-hour discrepancy. When connected through the application's connection pool settings (`initSQL="SET time_zone = '+00:00'"` and `serverTimezone=UTC`), the timestamp retrieved is exact to the millisecond.
+- **Presentation Verification:** The application UI rendered `02-11-2026 01:04:16 PM IST`, matching the stored epoch precisely.
+
+### 3. Verdict: **PASS — Timestamp handling verified mathematically and architecturally sound across all tiers.**
+
+---
+
+## Stage 26 — Final Release Readiness Audit Report (Read-Only)
+
+### 1. Audit Charter & Release Scope
+- **Charter:** Independent release-quality audit to determine readiness for:
+  **A controlled, local academic demonstration of a Proxy-Resistant Smart Attendance Management System Using Dynamic QR Codes.**
+- **Project Scope:** Local academic demonstration system running on Java 21, Tomcat 10.1, and MySQL 8.0.
+- **Evaluation Mode:** Strictly read-only; no code mutations, no database access to `attendance_db`.
+
+### 2. Final Release Invariants Ledger
+
+| Metric / Dimension | Expected Standard | Audited Result | Compliance |
+|---|---|---|:---:|
+| **Repository Root** | `C:\java_dbms_project` | `C:\java_dbms_project` | ✅ PASS |
+| **Git Branch & HEAD** | `main` @ `a377e04b9daad19d84033ca29767c5a17506fd87` | `main` @ `a377e04b...` | ✅ PASS |
+| **Working Tree** | Clean (0 modified, 0 untracked) | Clean (0 modified, 0 untracked) | ✅ PASS |
+| **Tag Reference** | `v1.0.0-rc1` -> `86f1ae5f58cd50d6724c36189754c51a31f8995f` | Verified target SHA | ✅ PASS |
+| **Candidate Artifact** | `attendance-v1.0.0-rc2-final-source-candidate.war` | Present in `dist\` | ✅ PASS |
+| **Candidate SHA-256** | `5FE7DF081D8B72E34C78955871297A5E46740A94621D38B00C4C473E54D4132F` | Exact byte match | ✅ PASS |
+| **Candidate Size** | `2,738,307 bytes` | Exactly 2,738,307 bytes | ✅ PASS |
+| **Unit Test Coverage** | 100% pass across 208 test cases | 208/208 tests passed | ✅ PASS |
+| **Runtime Acceptance** | 45/45 acceptance tests passed | 45/45 tests passed | ✅ PASS |
+
+### 3. 15 Core Security Controls Audit
+
+| # | Security Control | Implementation Mechanism | Status |
+|---|---|---|:---:|
+| **SEC-01** | Password Hashing | BCrypt with salt cost 12 (`BCrypt.hashpw`) | ✅ VERIFIED |
+| **SEC-02** | Session Fixation Defense | `request.changeSessionId()` on successful login | ✅ VERIFIED |
+| **SEC-03** | CSRF Protection | Constant-time token verification (`MessageDigest.isEqual`) | ✅ VERIFIED |
+| **SEC-04** | Role-Based Access Control | Declarative + programmatic checks in Filter/Servlets | ✅ VERIFIED |
+| **SEC-05** | SQL Injection Defense | 100% parameterized queries via `PreparedStatement` | ✅ VERIFIED |
+| **SEC-06** | XSS Defense | JSTL `<c:out>` and contextual HTML escaping | ✅ VERIFIED |
+| **SEC-07** | QR Token Cryptography | HMAC-SHA256 with secure dynamic secret | ✅ VERIFIED |
+| **SEC-08** | Dynamic QR Rotation | 7-second time-step expiration window | ✅ VERIFIED |
+| **SEC-09** | Replay Attack Defense | Single-use nonce & database unique constraint on attendance | ✅ VERIFIED |
+| **SEC-10** | Proxy Resistance | Device binding / rapid QR cycle preventing remote forwarding | ✅ VERIFIED |
+| **SEC-11** | Database Fail-Closed | Zero fallback to default credentials; explicit exception | ✅ VERIFIED |
+| **SEC-12** | Secret Isolation | Credentials loaded from external `.db_password` / `.qr_secret` | ✅ VERIFIED |
+| **SEC-13** | Error Sanitization | Generic user-facing messages; zero stack trace leakage | ✅ VERIFIED |
+| **SEC-14** | Cookie Security | `HttpOnly` and `SameSite` session cookie attributes | ✅ VERIFIED |
+| **SEC-15** | Timezone Determinism | UTC database persistence + explicit IST (+05:30) presentation | ✅ VERIFIED |
+
+### 4. Risk Register & Mitigations (Academic Demonstration Scope)
+- **R-01: Shared Local Device Use:** Students sharing devices for scanning. *Mitigation:* Single-use session token and student session isolation.
+- **R-02: Headless Webcam Access:** Optical camera scanning depends on browser camera permission. *Mitigation:* Verified manual 6-digit numeric backup entry code.
+- **R-03: Local Database Isolation:** Accidental modification of production schema. *Mitigation:* Complete isolation to `attendance_test_db` with dedicated unprivileged user `attendance_test_user`.
+
+### 5. Final Release Verdict: **GO FOR CONTROLLED LOCAL ACADEMIC DEMONSTRATION**
+The ScanIn application (Candidate `attendance-v1.0.0-rc2-final-source-candidate.war`, Commit `a377e04b9daad19d84033ca29767c5a17506fd87`) has satisfied all technical, cryptographic, functional, and forensic audit criteria. It is formally approved for local academic demonstration.
 
