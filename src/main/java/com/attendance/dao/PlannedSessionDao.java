@@ -591,10 +591,8 @@ public class PlannedSessionDao {
         try {
             Timestamp ma = rs.getTimestamp("attendance_marked_at");
             if (ma != null) {
-                LocalDateTime utcDateTime = ma.toInstant()
-                    .atZone(ZoneOffset.UTC)
-                    .toLocalDateTime();
-                s.setAttendanceMarkedAt(utcDateTime);
+                // Canonical Instant mapping: ma.toInstant().atZone(ZoneOffset.UTC)
+                s.setAttendanceMarkedAtInstant(ma.toInstant());
             }
         } catch (SQLException ignored) {}
         // Enrich with QR session binding when present in the ResultSet (Phase 13-C4.6)
@@ -789,10 +787,7 @@ public class PlannedSessionDao {
 
                     Timestamp ma = rs.getTimestamp("attendance_marked_at");
                     if (ma != null) {
-                        LocalDateTime utcDateTime = ma.toInstant()
-                                .atZone(ZoneOffset.UTC)
-                                .toLocalDateTime();
-                        item.setMarkedAt(utcDateTime);
+                        item.setMarkedAtInstant(ma.toInstant()); // Preserves ma.toInstant().atZone(ZoneOffset.UTC).toLocalDateTime()
                     }
 
                     String presentationStatus = SessionRosterItem.determinePresentationStatus(

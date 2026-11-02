@@ -1,8 +1,10 @@
 package com.attendance.model;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 /**
  * Entity representing a pre-planned calendar-dated academic session.
@@ -29,7 +31,7 @@ public class PlannedSession {
 
     // Student timetable attendance enrichment (Phase 13-C3)
     private String attendanceStatus; // PRESENT, LATE, ABSENT, or null if unrecorded
-    private LocalDateTime attendanceMarkedAt;
+    private Instant attendanceMarkedAt;
 
     // Phase 13-C4.6 QR Session binding & lifecycle consistency
     private Integer qrSessionId;
@@ -106,8 +108,16 @@ public class PlannedSession {
     public String getAttendanceStatus() { return attendanceStatus; }
     public void setAttendanceStatus(String attendanceStatus) { this.attendanceStatus = attendanceStatus; }
 
-    public LocalDateTime getAttendanceMarkedAt() { return attendanceMarkedAt; }
-    public void setAttendanceMarkedAt(LocalDateTime attendanceMarkedAt) { this.attendanceMarkedAt = attendanceMarkedAt; }
+    public Instant getAttendanceMarkedAtInstant() { return attendanceMarkedAt; }
+    public void setAttendanceMarkedAtInstant(Instant attendanceMarkedAt) { this.attendanceMarkedAt = attendanceMarkedAt; }
+
+    public LocalDateTime getAttendanceMarkedAt() {
+        return attendanceMarkedAt != null ? attendanceMarkedAt.atZone(ZoneOffset.UTC).toLocalDateTime() : null;
+    }
+
+    public void setAttendanceMarkedAt(LocalDateTime attendanceMarkedAt) {
+        this.attendanceMarkedAt = (attendanceMarkedAt != null ? attendanceMarkedAt.toInstant(ZoneOffset.UTC) : null);
+    }
 
     public String getAttendanceMarkedAtIst() {
         return com.attendance.util.DateTimeUtil.formatToIst(this.attendanceMarkedAt);
@@ -151,4 +161,3 @@ public class PlannedSession {
                 '}';
     }
 }
-

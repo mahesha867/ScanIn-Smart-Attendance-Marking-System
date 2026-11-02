@@ -1,6 +1,8 @@
 package com.attendance.model;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 /**
  * Attendance entity representing a single student attendance record.
@@ -16,19 +18,25 @@ public class Attendance {
     private String courseCode;
     private String courseName;
     private int qrSessionId;
-    private LocalDateTime markedAt;
+    private Instant markedAt;
     private String status; // PRESENT, ABSENT, LATE
 
     public Attendance() {}
 
     public Attendance(int id, int studentId, int courseId, int qrSessionId,
-                      LocalDateTime markedAt, String status) {
+                      Instant markedAt, String status) {
         this.id          = id;
         this.studentId   = studentId;
         this.courseId    = courseId;
         this.qrSessionId = qrSessionId;
         this.markedAt    = markedAt;
         this.status      = status;
+    }
+
+    public Attendance(int id, int studentId, int courseId, int qrSessionId,
+                      LocalDateTime markedAt, String status) {
+        this(id, studentId, courseId, qrSessionId,
+             markedAt != null ? markedAt.toInstant(ZoneOffset.UTC) : null, status);
     }
 
     // ── Getters and Setters ───────────────────────────────────────
@@ -56,8 +64,16 @@ public class Attendance {
     public int getQrSessionId()                       { return qrSessionId; }
     public void setQrSessionId(int qrSessionId)       { this.qrSessionId = qrSessionId; }
 
-    public LocalDateTime getMarkedAt()                { return markedAt; }
-    public void setMarkedAt(LocalDateTime markedAt)   { this.markedAt = markedAt; }
+    public Instant getMarkedAtInstant()               { return markedAt; }
+    public void setMarkedAtInstant(Instant markedAt)  { this.markedAt = markedAt; }
+
+    public LocalDateTime getMarkedAt() {
+        return markedAt != null ? markedAt.atZone(ZoneOffset.UTC).toLocalDateTime() : null;
+    }
+
+    public void setMarkedAt(LocalDateTime markedAt) {
+        this.markedAt = markedAt != null ? markedAt.toInstant(ZoneOffset.UTC) : null;
+    }
 
     /**
      * Returns the formatted marked-at timestamp in Indian Standard Time (IST - Asia/Kolkata).

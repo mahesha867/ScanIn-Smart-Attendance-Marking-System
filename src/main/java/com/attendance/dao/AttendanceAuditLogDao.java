@@ -167,7 +167,7 @@ public class AttendanceAuditLogDao {
         log.setNewStatus(rs.getString("new_status"));
         log.setReason(rs.getString("reason"));
         Timestamp ts = rs.getTimestamp("created_at");
-        if (ts != null) log.setCreatedAt(ts.toLocalDateTime());
+        if (ts != null) log.setCreatedAtInstant(ts.toInstant());
         return log;
     }
 }

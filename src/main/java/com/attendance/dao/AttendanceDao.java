@@ -641,7 +641,7 @@ public class AttendanceDao implements Dao<Attendance> {
         a.setQrSessionId(rs.getInt("qr_session_id"));
         Timestamp ts = rs.getTimestamp("marked_at");
         if (ts != null) {
-            a.setMarkedAt(ts.toLocalDateTime());
+            a.setMarkedAtInstant(ts.toInstant());
         }
         a.setStatus(rs.getString("status"));
         return a;

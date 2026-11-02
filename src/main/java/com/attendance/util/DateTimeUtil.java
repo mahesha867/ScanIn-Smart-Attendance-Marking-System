@@ -29,7 +29,7 @@ public final class DateTimeUtil {
 
     public static final String IST_DISPLAY_PATTERN = "dd-MM-yyyy hh:mm:ss a 'IST'";
     public static final String IST_STANDARD_PATTERN = "dd-MM-yyyy hh:mm:ss a";
-    public static final String ISO_IST_PATTERN = "yyyy-MM-dd hh:mm:ss a";
+    public static final String ISO_IST_PATTERN = "yyyy-MM-dd'T'HH:mm:ssXXX";
 
     public static final DateTimeFormatter IST_DISPLAY_FORMATTER =
             DateTimeFormatter.ofPattern(IST_DISPLAY_PATTERN, Locale.ENGLISH);
@@ -41,14 +41,6 @@ public final class DateTimeUtil {
             DateTimeFormatter.ofPattern(ISO_IST_PATTERN, Locale.ENGLISH);
 
     private DateTimeUtil() {}
-
-    /**
-     * Converts a UTC LocalDateTime to an Asia/Kolkata ZonedDateTime.
-     */
-    public static ZonedDateTime toIst(LocalDateTime utcDateTime) {
-        if (utcDateTime == null) return null;
-        return utcDateTime.atZone(UTC_ZONE).withZoneSameInstant(IST_ZONE);
-    }
 
     /**
      * Converts an absolute Instant to an Asia/Kolkata ZonedDateTime.
@@ -67,11 +59,12 @@ public final class DateTimeUtil {
     }
 
     /**
-     * Formats a UTC LocalDateTime into IST presentation string: "dd-MM-yyyy hh:mm:ss a IST".
+     * Converts a UTC LocalDateTime to an Asia/Kolkata ZonedDateTime.
+     * Note: Input LocalDateTime is assumed to represent canonical UTC wall-clock time.
      */
-    public static String formatToIst(LocalDateTime utcDateTime) {
-        if (utcDateTime == null) return "N/A";
-        return toIst(utcDateTime).format(IST_DISPLAY_FORMATTER);
+    public static ZonedDateTime toIst(LocalDateTime utcDateTime) {
+        if (utcDateTime == null) return null;
+        return utcDateTime.atZone(UTC_ZONE).withZoneSameInstant(IST_ZONE);
     }
 
     /**
@@ -91,11 +84,11 @@ public final class DateTimeUtil {
     }
 
     /**
-     * Formats without the trailing 'IST' literal: "dd-MM-yyyy hh:mm:ss a".
+     * Formats a UTC LocalDateTime into IST presentation string: "dd-MM-yyyy hh:mm:ss a IST".
      */
-    public static String formatToIstStandard(LocalDateTime utcDateTime) {
+    public static String formatToIst(LocalDateTime utcDateTime) {
         if (utcDateTime == null) return "N/A";
-        return toIst(utcDateTime).format(IST_STANDARD_FORMATTER);
+        return toIst(utcDateTime).format(IST_DISPLAY_FORMATTER);
     }
 
     /**
@@ -106,28 +99,33 @@ public final class DateTimeUtil {
         return toIst(instant).format(IST_STANDARD_FORMATTER);
     }
 
-    /**
-     * Formats into ISO date order in IST: "yyyy-MM-dd hh:mm:ss a".
-     */
-    public static String formatToIstIso(LocalDateTime utcDateTime) {
+    public static String formatToIstStandard(Timestamp timestamp) {
+        if (timestamp == null) return "N/A";
+        return toIst(timestamp).format(IST_STANDARD_FORMATTER);
+    }
+
+    public static String formatToIstStandard(LocalDateTime utcDateTime) {
         if (utcDateTime == null) return "N/A";
-        return toIst(utcDateTime).format(ISO_IST_FORMATTER);
+        return toIst(utcDateTime).format(IST_STANDARD_FORMATTER);
     }
 
     /**
-     * Formats into ISO date order in IST: "yyyy-MM-dd hh:mm:ss a".
+     * Formats an Instant into ISO-8601 offset representation in Asia/Kolkata timezone:
+     * "yyyy-MM-dd'T'HH:mm:ss+05:30" (e.g., "2026-11-02T10:47:08+05:30").
      */
     public static String formatToIstIso(Instant instant) {
         if (instant == null) return "N/A";
         return toIst(instant).format(ISO_IST_FORMATTER);
     }
 
-    /**
-     * Formats a UTC LocalDateTime using a custom pattern in Asia/Kolkata timezone.
-     */
-    public static String formatToIst(LocalDateTime utcDateTime, String pattern) {
+    public static String formatToIstIso(Timestamp timestamp) {
+        if (timestamp == null) return "N/A";
+        return toIst(timestamp).format(ISO_IST_FORMATTER);
+    }
+
+    public static String formatToIstIso(LocalDateTime utcDateTime) {
         if (utcDateTime == null) return "N/A";
-        return toIst(utcDateTime).format(DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH));
+        return toIst(utcDateTime).format(ISO_IST_FORMATTER);
     }
 
     /**
@@ -136,5 +134,15 @@ public final class DateTimeUtil {
     public static String formatToIst(Instant instant, String pattern) {
         if (instant == null) return "N/A";
         return toIst(instant).format(DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH));
+    }
+
+    public static String formatToIst(Timestamp timestamp, String pattern) {
+        if (timestamp == null) return "N/A";
+        return toIst(timestamp).format(DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH));
+    }
+
+    public static String formatToIst(LocalDateTime utcDateTime, String pattern) {
+        if (utcDateTime == null) return "N/A";
+        return toIst(utcDateTime).format(DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH));
     }
 }

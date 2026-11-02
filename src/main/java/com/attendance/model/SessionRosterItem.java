@@ -1,6 +1,8 @@
 package com.attendance.model;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 /**
  * Model representing a single student entry on a teacher-authorized planned session roster.
@@ -8,7 +10,7 @@ import java.time.LocalDateTime;
  * Encapsulates the minimum necessary information:
  * - Student ID, Roll Number, Student Name
  * - Persisted Attendance Status (PRESENT, LATE, ABSENT, or null)
- * - Persisted Attendance Timestamp (UTC LocalDateTime, or null)
+ * - Persisted Attendance Timestamp (UTC Instant / LocalDateTime, or null)
  * - Presentation Status derived from the authoritative lifecycle state machine
  *
  * Security Note:
@@ -20,7 +22,7 @@ public class SessionRosterItem {
     private String rollNumber;
     private String studentName;
     private String attendanceStatus;
-    private LocalDateTime markedAt;
+    private Instant markedAt;
     private String presentationStatus;
     private boolean inconsistent;
     private Boolean qrIsActive;
@@ -34,7 +36,7 @@ public class SessionRosterItem {
         this.rollNumber = rollNumber;
         this.studentName = studentName;
         this.attendanceStatus = attendanceStatus;
-        this.markedAt = markedAt;
+        this.markedAt = (markedAt != null ? markedAt.toInstant(ZoneOffset.UTC) : null);
         this.presentationStatus = presentationStatus;
         this.inconsistent = inconsistent;
     }
@@ -79,12 +81,27 @@ public class SessionRosterItem {
         this.attendanceStatus = attendanceStatus;
     }
 
-    public LocalDateTime getMarkedAt() {
+    public Instant getMarkedAtInstant() {
         return markedAt;
     }
 
-    public void setMarkedAt(LocalDateTime markedAt) {
+    public void setMarkedAtInstant(Instant markedAt) {
         this.markedAt = markedAt;
+    }
+
+    public LocalDateTime getMarkedAt() {
+        return markedAt != null ? markedAt.atZone(ZoneOffset.UTC).toLocalDateTime() : null;
+    }
+
+    public void setMarkedAt(LocalDateTime markedAt) {
+        this.markedAt = (markedAt != null ? markedAt.toInstant(ZoneOffset.UTC) : null);
+    }
+
+    /**
+     * Formats marked-at timestamp into Indian Standard Time (IST - Asia/Kolkata).
+     */
+    public String getMarkedAtIst() {
+        return com.attendance.util.DateTimeUtil.formatToIst(this.markedAt);
     }
 
     public String getPresentationStatus() {
@@ -191,4 +208,3 @@ public class SessionRosterItem {
         return determinePresentationStatus(plannedStatus, qrSessionId, inferredActive, attendanceStatus);
     }
 }
-

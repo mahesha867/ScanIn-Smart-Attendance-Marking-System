@@ -92,8 +92,8 @@ public class TimezoneVerificationTest {
         if (!formattedStandard.equals("01-11-2026 10:30:00 AM")) {
             throw new AssertionError("Expected '01-11-2026 10:30:00 AM', got: " + formattedStandard);
         }
-        if (!formattedIso.equals("2026-11-01 10:30:00 AM")) {
-            throw new AssertionError("Expected '2026-11-01 10:30:00 AM', got: " + formattedIso);
+        if (!formattedIso.equals("2026-11-01T10:30:00+05:30")) {
+            throw new AssertionError("Expected '2026-11-01T10:30:00+05:30', got: " + formattedIso);
         }
 
         // Test with Instant
@@ -118,8 +118,8 @@ public class TimezoneVerificationTest {
         if (!formattedWithZone.equals("01-11-2026 01:30:00 AM IST")) {
             throw new AssertionError("Expected '01-11-2026 01:30:00 AM IST', got: " + formattedWithZone);
         }
-        if (!formattedIso.equals("2026-11-01 01:30:00 AM")) {
-            throw new AssertionError("Expected '2026-11-01 01:30:00 AM', got: " + formattedIso);
+        if (!formattedIso.equals("2026-11-01T01:30:00+05:30")) {
+            throw new AssertionError("Expected '2026-11-01T01:30:00+05:30', got: " + formattedIso);
         }
 
         ZonedDateTime istZdt = DateTimeUtil.toIst(utcDateTime);
