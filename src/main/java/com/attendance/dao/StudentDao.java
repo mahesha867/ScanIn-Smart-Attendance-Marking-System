@@ -154,7 +154,7 @@ public class StudentDao implements Dao<Student> {
                      "JOIN courses c ON e.course_id = c.id " +
                      "JOIN teachers t ON c.teacher_id = t.teacher_id " +
                      "JOIN users u ON t.user_id = u.id " +
-                     "WHERE e.student_id = ? AND (e.status = 'ACTIVE' OR e.status IS NULL) " +
+                     "WHERE e.student_id = ? " +
                      "ORDER BY c.course_code ASC";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -188,7 +188,7 @@ public class StudentDao implements Dao<Student> {
                      "FROM enrollments e " +
                      "JOIN students s ON e.student_id = s.student_id " +
                      "JOIN users u ON s.user_id = u.id " +
-                     "WHERE e.course_id = ? AND (e.status = 'ACTIVE' OR e.status IS NULL) " +
+                     "WHERE e.course_id = ? " +
                      "ORDER BY s.roll_number ASC";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {

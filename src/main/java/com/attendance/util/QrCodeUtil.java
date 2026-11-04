@@ -4,8 +4,6 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.Base64;
-import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -20,127 +18,7 @@ import java.util.UUID;
 public class QrCodeUtil {
 
     private static final String HMAC_ALGO = "HmacSHA256";
-    public static final int MIN_SECRET_BYTES = 32;
-    private static volatile String testSecretOverride = null;
-
-    /**
-     * Sets an in-memory HMAC secret override for testing purposes.
-     * Never commit or log secret values.
-     */
-    public static synchronized void setSecretKeyForTesting(String secret) {
-        testSecretOverride = secret;
-    }
-
-    /**
-     * Clears the in-memory test secret override, restoring environment resolution.
-     */
-    public static synchronized void clearSecretKeyForTesting() {
-        testSecretOverride = null;
-    }
-
-    /**
-     * Resolves the server-side HMAC secret key from the secure environment.
-     * Enforces minimum entropy (at least 32 bytes of cryptographic entropy).
-     * Fails closed if the secret is missing, blank, or insufficient.
-     */
-    public static String resolveSecret() {
-        if (testSecretOverride != null) {
-            if (testSecretOverride.trim().isEmpty()) {
-                throw new IllegalStateException("HMAC secret configuration error: QR_HMAC_SECRET environment variable is missing or blank. Dynamic attendance token operations cannot proceed.");
-            }
-            validateSecret(testSecretOverride.trim());
-            return testSecretOverride.trim();
-        }
-        String secret = System.getenv("QR_HMAC_SECRET");
-        if (secret == null || secret.trim().isEmpty()) {
-            secret = System.getenv("HMAC_SECRET");
-        }
-        if (secret == null || secret.trim().isEmpty()) {
-            secret = System.getProperty("QR_HMAC_SECRET");
-        }
-        if (secret == null || secret.trim().isEmpty()) {
-            secret = System.getProperty("qr.hmac.secret");
-        }
-        if (secret == null || secret.trim().isEmpty()) {
-            secret = System.getProperty("HMAC_SECRET");
-        }
-        if (secret == null || secret.trim().isEmpty()) {
-            throw new IllegalStateException("HMAC secret configuration error: QR_HMAC_SECRET environment variable is missing or blank. Dynamic attendance token operations cannot proceed.");
-        }
-        validateSecret(secret.trim());
-        return secret.trim();
-    }
-
-    /**
-     * Decodes the configured secret string into raw secret bytes.
-     * Supports Hex (>= 64 chars), Base64 (>= 43 chars), or raw UTF-8 string bytes.
-     */
-    public static byte[] decodeSecretBytes(String secret) {
-        if (secret == null) {
-            return new byte[0];
-        }
-        String trimmed = secret.trim();
-        // 1. Check if 64+ hex characters (representing >= 32 raw bytes)
-        if (trimmed.length() >= 64 && trimmed.matches("^[0-9a-fA-F]+$") && (trimmed.length() % 2 == 0)) {
-            byte[] bytes = new byte[trimmed.length() / 2];
-            for (int i = 0; i < bytes.length; i++) {
-                bytes[i] = (byte) Integer.parseInt(trimmed.substring(i * 2, i * 2 + 2), 16);
-            }
-            if (bytes.length >= MIN_SECRET_BYTES) {
-                return bytes;
-            }
-        }
-        // 2. Check if Base64 encoded (length >= 43 chars for >= 32 bytes)
-        if (trimmed.length() >= 43 && trimmed.matches("^[A-Za-z0-9+/=_-]+$")) {
-            try {
-                byte[] decoded = Base64.getDecoder().decode(trimmed);
-                if (decoded.length >= MIN_SECRET_BYTES) {
-                    return decoded;
-                }
-            } catch (IllegalArgumentException ignored) {
-                try {
-                    byte[] decodedUrl = Base64.getUrlDecoder().decode(trimmed);
-                    if (decodedUrl.length >= MIN_SECRET_BYTES) {
-                        return decodedUrl;
-                    }
-                } catch (IllegalArgumentException ignored2) {}
-            }
-        }
-        // 3. Raw UTF-8 bytes
-        return trimmed.getBytes(StandardCharsets.UTF_8);
-    }
-
-    private static void validateSecret(String secret) {
-        if (secret == null || secret.trim().isEmpty()) {
-            throw new IllegalStateException("HMAC secret configuration error: QR_HMAC_SECRET environment variable is missing or blank. Dynamic attendance token operations cannot proceed.");
-        }
-        byte[] bytes = decodeSecretBytes(secret);
-        if (bytes.length < MIN_SECRET_BYTES) {
-            throw new IllegalStateException("HMAC secret configuration error: QR_HMAC_SECRET must provide at least 32 characters / 32 bytes of cryptographic entropy (found " + bytes.length + " bytes).");
-        }
-        // Entropy check: verify byte diversity and Shannon entropy to prevent low-entropy/predictable keys
-        int distinct = 0;
-        int[] freq = new int[256];
-        for (byte b : bytes) {
-            int idx = b & 0xFF;
-            if (freq[idx] == 0) distinct++;
-            freq[idx]++;
-        }
-        if (distinct < 10) {
-            throw new IllegalStateException("HMAC secret configuration error: QR_HMAC_SECRET lacks sufficient cryptographic entropy (insufficient character/byte diversity).");
-        }
-        double entropy = 0.0;
-        int len = bytes.length;
-        for (int count : freq) {
-            if (count > 0) {
-                double p = (double) count / len;
-                entropy -= p * (Math.log(p) / Math.log(2));
-            }
-        }
-        if (entropy < 2.5) {
-            throw new IllegalStateException("HMAC secret configuration error: QR_HMAC_SECRET lacks sufficient cryptographic entropy (Shannon entropy too low: " + String.format(Locale.ROOT, "%.2f", entropy) + ").");
-        }
-    }
+    private static final String SECRET_KEY = "ScanIn#PurpleCollegiateAttendanceHMAC2026";
 
     // Dynamic rotation interval on screen: 7 seconds
     public static final int ROTATION_INTERVAL_SECONDS = 7;
@@ -248,9 +126,8 @@ public class QrCodeUtil {
      */
     public static String computeHmac(String data) {
         try {
-            byte[] keyBytes = decodeSecretBytes(resolveSecret());
             Mac mac = Mac.getInstance(HMAC_ALGO);
-            SecretKeySpec secretKeySpec = new SecretKeySpec(keyBytes, HMAC_ALGO);
+            SecretKeySpec secretKeySpec = new SecretKeySpec(SECRET_KEY.getBytes(StandardCharsets.UTF_8), HMAC_ALGO);
             mac.init(secretKeySpec);
             byte[] raw = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder(raw.length * 2);
@@ -259,9 +136,6 @@ public class QrCodeUtil {
             }
             return sb.toString();
         } catch (Exception e) {
-            if (e instanceof IllegalStateException) {
-                throw (IllegalStateException) e;
-            }
             throw new RuntimeException("HMAC-SHA256 computation failed", e);
         }
     }
@@ -354,8 +228,6 @@ public class QrCodeUtil {
             }
 
             return new TokenValidation(TokenStatus.VALID, sessionId, courseId, timestamp, nonce, "Token is valid and within active rotation window");
-        } catch (IllegalStateException e) {
-            return new TokenValidation(TokenStatus.INVALID, 0, 0, 0, null, e.getMessage());
         } catch (NumberFormatException e) {
             return new TokenValidation(TokenStatus.INVALID, 0, 0, 0, null, "Malformed token numeric fields");
         }

@@ -1,8 +1,6 @@
 package com.attendance.model;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 
 /**
  * Entity representing an immutable audit log record for manual attendance modifications.
@@ -24,7 +22,7 @@ public class AttendanceAuditLog {
     private String oldStatus;
     private String newStatus;
     private String reason;
-    private Instant createdAt;
+    private LocalDateTime createdAt;
 
     public AttendanceAuditLog() {}
 
@@ -37,7 +35,7 @@ public class AttendanceAuditLog {
         this.oldStatus = oldStatus;
         this.newStatus = newStatus;
         this.reason = reason;
-        this.createdAt = Instant.now();
+        this.createdAt = LocalDateTime.now();
     }
 
     public int getId() { return id; }
@@ -76,22 +74,6 @@ public class AttendanceAuditLog {
     public String getReason() { return reason; }
     public void setReason(String reason) { this.reason = reason; }
 
-    public Instant getCreatedAtInstant() { return createdAt; }
-    public void setCreatedAtInstant(Instant createdAt) { this.createdAt = createdAt; }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt != null ? createdAt.atZone(ZoneOffset.UTC).toLocalDateTime() : null;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = (createdAt != null ? createdAt.toInstant(ZoneOffset.UTC) : null);
-    }
-
-    /**
-     * Returns the formatted created-at timestamp in Indian Standard Time (IST - Asia/Kolkata).
-     * Example: "01-11-2026 10:45:32 AM IST"
-     */
-    public String getCreatedAtIst() {
-        return com.attendance.util.DateTimeUtil.formatToIst(this.createdAt);
-    }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

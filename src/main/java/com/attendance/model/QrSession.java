@@ -19,7 +19,6 @@ public class QrSession {
     private LocalDateTime closedAt;
     private LocalDateTime createdAt;
     private boolean active;
-    private Integer plannedSessionId;
 
     public QrSession() {}
 
@@ -71,9 +70,6 @@ public class QrSession {
 
     public boolean isActive()                         { return active; }
     public void setActive(boolean active)             { this.active = active; }
-
-    public Integer getPlannedSessionId()              { return plannedSessionId; }
-    public void setPlannedSessionId(Integer plannedSessionId) { this.plannedSessionId = plannedSessionId; }
 
     @Override
     public String toString() {

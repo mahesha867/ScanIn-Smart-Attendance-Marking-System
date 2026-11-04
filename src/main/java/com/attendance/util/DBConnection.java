@@ -16,6 +16,10 @@ import java.util.TimeZone;
  */
 public class DBConnection {
 
+    private static final String DEFAULT_URL = "jdbc:mysql://localhost:3306/attendance_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true";
+    private static final String DEFAULT_USER = "root";
+    private static final String DEFAULT_PASSWORD = "root";
+
     private static DBConnection instance;
     private final DataSource dataSource;
 
@@ -25,59 +29,38 @@ public class DBConnection {
 
     private static String resolveDbUrl() {
         String envUrl = System.getenv("DB_URL");
-        if (envUrl == null || envUrl.trim().isEmpty()) envUrl = System.getenv("DATABASE_URL");
-        if (envUrl == null || envUrl.trim().isEmpty()) envUrl = System.getenv("MYSQL_URL");
-        if (envUrl == null || envUrl.trim().isEmpty()) envUrl = System.getProperty("DB_URL");
-        if (envUrl == null || envUrl.trim().isEmpty()) envUrl = System.getProperty("db.url");
-
         if (envUrl == null || envUrl.trim().isEmpty()) {
-            throw new IllegalStateException("Database configuration error: Missing required DB_URL. Application cannot connect without an explicit database target.");
+            envUrl = System.getenv("DATABASE_URL");
         }
-        String url = envUrl.trim();
-        if (url.startsWith("mysql://")) {
-            url = "jdbc:" + url;
+        if (envUrl == null || envUrl.trim().isEmpty()) {
+            envUrl = System.getenv("MYSQL_URL");
         }
-        if (!url.contains("serverTimezone")) {
-            String sep = url.contains("?") ? "&" : "?";
-            url += sep + "serverTimezone=UTC&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true";
+        if (envUrl != null && !envUrl.trim().isEmpty()) {
+            String url = envUrl.trim();
+            if (url.startsWith("mysql://")) {
+                url = "jdbc:" + url;
+            }
+            if (!url.contains("serverTimezone")) {
+                String sep = url.contains("?") ? "&" : "?";
+                url += sep + "serverTimezone=UTC&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true";
+            }
+            return url;
         }
-        return url;
+        return DEFAULT_URL;
     }
 
     private static String resolveDbUser() {
         String user = System.getenv("DB_USER");
         if (user == null || user.trim().isEmpty()) user = System.getenv("DATABASE_USER");
         if (user == null || user.trim().isEmpty()) user = System.getenv("MYSQL_USER");
-        if (user == null || user.trim().isEmpty()) user = System.getProperty("DB_USER");
-        if (user == null || user.trim().isEmpty()) user = System.getProperty("db.user");
-
-        if (user == null || user.trim().isEmpty()) {
-            throw new IllegalStateException("Database configuration error: Missing required DB_USER. Application cannot connect without an explicit database user.");
-        }
-        return user.trim();
+        return (user != null && !user.trim().isEmpty()) ? user.trim() : DEFAULT_USER;
     }
 
     private static String resolveDbPassword() {
         String pass = System.getenv("DB_PASSWORD");
         if (pass == null || pass.trim().isEmpty()) pass = System.getenv("DATABASE_PASSWORD");
         if (pass == null || pass.trim().isEmpty()) pass = System.getenv("MYSQL_PASSWORD");
-        if (pass == null || pass.trim().isEmpty()) pass = System.getProperty("DB_PASSWORD");
-        if (pass == null || pass.trim().isEmpty()) pass = System.getProperty("db.password");
-
-        if (pass == null) {
-            throw new IllegalStateException("Database configuration error: Missing required DB_PASSWORD. Application cannot connect without explicit database authentication.");
-        }
-        return pass;
-    }
-
-    /**
-     * Resets the singleton instance for testing purposes.
-     */
-    public static synchronized void resetInstanceForTesting() {
-        if (instance != null) {
-            instance.close();
-            instance = null;
-        }
+        return (pass != null) ? pass : DEFAULT_PASSWORD;
     }
 
     private DBConnection() {

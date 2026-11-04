@@ -80,22 +80,14 @@ public class LoginServlet extends HttpServlet {
 
                 SessionUtil.setLoggedInUser(request, user, teacher, student);
 
-                // If student scanned a QR link before logging in, resume the scan workflow
-                String pendingToken = (String) request.getSession().getAttribute("pendingToken");
-                if (pendingToken != null && !pendingToken.trim().isEmpty() && "STUDENT".equalsIgnoreCase(user.getRole())) {
-                    request.getSession().removeAttribute("pendingToken");
-                    response.sendRedirect(request.getContextPath() + "/qr/scan?token=" + java.net.URLEncoder.encode(pendingToken.trim(), "UTF-8"));
-                    return;
-                }
-
                 // Polymorphism: dynamic routing based on user type
                 response.sendRedirect(request.getContextPath() + user.getDashboardPath());
                 return;
             }
         }
 
-        if (UserDao.lastQueryHadDatabaseError) {
-            request.setAttribute("errorMessage", "Database service error. Please try again later or contact the administrator.");
+        if (UserDao.lastSqlError != null) {
+            request.setAttribute("errorMessage", "Database Error: " + UserDao.lastSqlError);
         } else if (!userOpt.isPresent()) {
             request.setAttribute("errorMessage", "No account found for '" + email.trim() + "'. (Ensure database/schema.sql was executed on your database).");
         } else {

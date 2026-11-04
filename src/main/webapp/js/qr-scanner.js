@@ -3,7 +3,7 @@
  */
 
 // ── Dynamic QR Session Live 7-Second Auto-Refresher (Teacher Screen) ──
-function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNumericCode, contextPath, initialRemainingMs, initialNextBoundary, plannedSessionId) {
+function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNumericCode, contextPath, initialRemainingMs, initialNextBoundary) {
     // 1. Singleton guard: Cancel any existing timers or polling loops
     if (window.__scanInSession) {
         if (window.__scanInSession.countdownTimer) {
@@ -33,8 +33,7 @@ function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNum
     const countDisplay = document.getElementById("student-count");
 
     const base = (contextPath !== undefined && contextPath !== null) ? contextPath : "";
-    const pParam = (plannedSessionId && plannedSessionId > 0) ? "&plannedSessionId=" + plannedSessionId : "";
-    const activeUrl = base + "/qr/active?courseId=" + courseId + pParam + "&format=json";
+    const activeUrl = base + "/qr/active?courseId=" + courseId + "&format=json";
 
     function updateUi(token, scanUrl, numericCode) {
         if (token && token !== sessionState.currentToken) {
@@ -77,10 +76,10 @@ function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNum
                     // Use server's remainingMs to re-anchor local monotonic target time
                     const remMs = (typeof data.remainingMs === "number" && data.remainingMs > 0) ? data.remainingMs : 7000;
                     sessionState.targetMonotonicTime = performance.now() + remMs;
-                } else if (data.status === "closed" || data.status === "expired") {
+                } else if (data.status === "closed") {
                     cleanup();
                     if (timerElem) {
-                        timerElem.innerText = data.status === "expired" ? "Expired" : "Closed";
+                        timerElem.innerText = "Closed";
                         timerElem.className = "timer-badge";
                         timerElem.style.background = "#fee2e2";
                         timerElem.style.color = "#dc2626";

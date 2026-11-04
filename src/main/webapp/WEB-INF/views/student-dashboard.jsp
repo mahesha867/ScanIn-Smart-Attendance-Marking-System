@@ -2,10 +2,8 @@
 <%@ page import="com.attendance.model.Attendance" %>
 <%@ page import="com.attendance.model.Course" %>
 <%@ page import="com.attendance.model.CourseSchedule" %>
-<%@ page import="com.attendance.model.PlannedSession" %>
 <%@ page import="com.attendance.model.Student" %>
 <%@ page import="com.attendance.model.User" %>
-<%@ page import="com.attendance.util.DateTimeUtil" %>
 <%@ page import="java.time.format.DateTimeFormatter" %>
 <%@ page import="java.util.List" %>
 <%@ page import="java.util.Map" %>
@@ -17,7 +15,6 @@
     Double overallAttendance = (Double) request.getAttribute("overallAttendance");
     Boolean hasLowAttendance = (Boolean) request.getAttribute("hasLowAttendance");
     List<CourseSchedule> upcomingClasses = (List<CourseSchedule>) request.getAttribute("upcomingClasses");
-    List<PlannedSession> plannedSessions = (List<PlannedSession>) request.getAttribute("plannedSessions");
     List<Course> availableCourses = (List<Course>) request.getAttribute("availableCourses");
     List<Attendance> history = (List<Attendance>) request.getAttribute("history");
     DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a");
@@ -267,159 +264,7 @@
         </section>
 
         <!-- ════════════════════════════════════════════════════════════ -->
-        <!-- SECTION 3: PLANNED ACADEMIC SESSIONS & TIMETABLE (STAGE 13)   -->
-        <!-- ════════════════════════════════════════════════════════════ -->
-        <section class="glass-card" style="margin-bottom: 2rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1.5px solid var(--border-subtle); padding-bottom: 0.75rem;">
-                <div>
-                    <h2 style="font-size: 1.25rem; font-weight: 700; color: #582c83; display: flex; align-items: center; gap: 0.5rem;">
-                        📅 Planned Academic Sessions & Timetable
-                    </h2>
-                    <span style="font-size: 0.82rem; color: var(--text-muted);">Calendar-dated sessions & individual attendance status for enrolled courses</span>
-                </div>
-                <span class="badge" style="background: var(--purple-subtle); color: #582c83; border: 1px solid var(--purple-border); font-size: 0.75rem;">
-                    <%= plannedSessions != null ? plannedSessions.size() : 0 %> Sessions Scheduled
-                </span>
-            </div>
-
-            <% if (plannedSessions == null || plannedSessions.isEmpty()) { %>
-                <!-- Empty State: No Planned Sessions -->
-                <div style="text-align: center; padding: 2.5rem 1rem; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1.5px dashed var(--border-subtle);">
-                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📆</div>
-                    <h3 style="font-size: 1.15rem; font-weight: 700; color: #1e293b; margin-bottom: 0.3rem;">No Planned Sessions Scheduled</h3>
-                    <p style="color: var(--text-muted); font-size: 0.92rem; max-width: 520px; margin: 0 auto;">
-                        There are no pre-planned academic sessions scheduled for your enrolled courses yet. Once faculty members schedule sessions, they will appear here with your personal attendance status.
-                    </p>
-                </div>
-            <% } else { %>
-                <div class="table-responsive">
-                    <table class="data-table" id="student-timetable-table">
-                        <thead>
-                            <tr>
-                                <th>Date & Time (IST)</th>
-                                <th>Course</th>
-                                <th>Faculty</th>
-                                <th>Room / Type</th>
-                                <th>Session Status</th>
-                                <th>Your Attendance</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <% for (PlannedSession ps : plannedSessions) { 
-                                String attStatus = ps.getAttendanceStatus();
-                                String sessStatus = ps.getStatus();
-                            %>
-                                <tr>
-                                    <td>
-                                        <div style="font-weight: 700; color: #1e293b;">
-                                            <%= ps.getSessionDate() != null ? ps.getSessionDate().toString() : "TBA" %>
-                                        </div>
-                                        <div style="font-size: 0.85rem; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">
-                                            <%= ps.getStartTime() != null ? ps.getStartTime().toString() : "" %> – <%= ps.getEndTime() != null ? ps.getEndTime().toString() : "" %>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <strong><%= ps.getCourseCode() != null ? ps.getCourseCode() : ("Course #" + ps.getCourseId()) %></strong>
-                                        <div style="font-size: 0.85rem; color: var(--text-secondary);"><%= ps.getCourseName() != null ? ps.getCourseName() : "" %></div>
-                                    </td>
-                                    <td style="color: var(--text-secondary);">
-                                        <%= ps.getTeacherName() != null ? ps.getTeacherName() : "Faculty Staff" %>
-                                    </td>
-                                    <td>
-                                        <div><%= ps.getRoom() != null && !ps.getRoom().trim().isEmpty() ? ps.getRoom() : "TBA" %></div>
-                                        <div style="margin-top: 0.25rem; display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
-                                            <span class="badge" style="font-size: 0.72rem; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
-                                                <%= ps.getSessionType() != null ? ps.getSessionType() : "LECTURE" %>
-                                            </span>
-                                            <% if (ps.getBlockId() != null && !ps.getBlockId().trim().isEmpty()) { %>
-                                                <span class="badge" style="font-size: 0.72rem; background: #fdf4ff; color: #a21caf; border: 1px solid #f0abfc;" title="Consecutive Academic Block: <%= ps.getBlockId() %>">
-                                                    🔗 Block
-                                                </span>
-                                            <% } else { %>
-                                                <span class="badge" style="font-size: 0.72rem; background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0;">
-                                                    Standalone
-                                                </span>
-                                            <% } %>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <% if (ps.isInconsistent()) { %>
-                                            <span class="badge" style="background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;">
-                                                ⚠️ INCONSISTENT
-                                            </span>
-                                        <% } else if ("ATTENDANCE_OPEN".equalsIgnoreCase(sessStatus)) { %>
-                                            <span class="badge badge-present" style="animation: pulse 2s infinite;">
-                                                🟢 OPEN NOW
-                                            </span>
-                                        <% } else if ("SCHEDULED".equalsIgnoreCase(sessStatus)) { %>
-                                            <span class="badge" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;">
-                                                📅 SCHEDULED
-                                            </span>
-                                        <% } else if ("COMPLETED".equalsIgnoreCase(sessStatus)) { %>
-                                            <span class="badge" style="background: #e2e8f0; color: #334155; border: 1px solid #cbd5e1;">
-                                                ✓ COMPLETED
-                                            </span>
-                                        <% } else { %>
-                                            <span class="badge" style="background: #f8fafc; color: #94a3b8; border: 1px solid #e2e8f0;">
-                                                <%= sessStatus != null ? sessStatus : "—" %>
-                                            </span>
-                                        <% } %>
-                                    </td>
-                                    <td>
-                                        <% if (ps.isInconsistent()) { %>
-                                            <span class="badge" style="background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; font-size: 0.82rem; padding: 0.35rem 0.65rem;">
-                                                ⚠️ DATA INCONSISTENCY
-                                            </span>
-                                        <% } else if ("PRESENT".equalsIgnoreCase(attStatus)) { %>
-                                            <span class="badge badge-present" style="font-size: 0.82rem; padding: 0.35rem 0.65rem;">
-                                                ✅ PRESENT
-                                            </span>
-                                            <% if (ps.getAttendanceMarkedAt() != null) { %>
-                                                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem; font-family: 'JetBrains Mono', monospace;">
-                                                    <%= ps.getAttendanceMarkedAtIst() %>
-                                                </div>
-                                            <% } %>
-                                        <% } else if ("LATE".equalsIgnoreCase(attStatus)) { %>
-                                            <span class="badge" style="background: #fffbeb; color: #d97706; border: 1px solid #fde68a; font-size: 0.82rem; padding: 0.35rem 0.65rem;">
-                                                ⏳ LATE
-                                            </span>
-                                            <% if (ps.getAttendanceMarkedAt() != null) { %>
-                                                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem; font-family: 'JetBrains Mono', monospace;">
-                                                    <%= ps.getAttendanceMarkedAtIst() %>
-                                                </div>
-                                            <% } %>
-                                        <% } else if ("ABSENT".equalsIgnoreCase(attStatus)) { %>
-                                            <span class="badge badge-absent" style="font-size: 0.82rem; padding: 0.35rem 0.65rem;">
-                                                ❌ ABSENT
-                                            </span>
-                                        <% } else if ("ATTENDANCE_OPEN".equalsIgnoreCase(sessStatus)) { %>
-                                            <a href="${pageContext.request.contextPath}/qr/scan" class="badge" style="background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; text-decoration: none; font-size: 0.82rem; padding: 0.35rem 0.65rem; display: inline-flex; align-items: center; gap: 0.25rem;">
-                                                📷 Scan to Mark
-                                            </a>
-                                        <% } else if ("SCHEDULED".equalsIgnoreCase(sessStatus)) { %>
-                                            <span class="badge" style="background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; font-size: 0.82rem; padding: 0.35rem 0.65rem;">
-                                                ⚪ NOT YET RECORDED
-                                            </span>
-                                        <% } else if ("COMPLETED".equalsIgnoreCase(sessStatus)) { %>
-                                            <span class="badge" style="background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; font-size: 0.82rem; padding: 0.35rem 0.65rem;">
-                                                ⚪ NOT RECORDED
-                                            </span>
-                                        <% } else { %>
-                                            <span class="badge" style="background: #f8fafc; color: #94a3b8; border: 1px solid #e2e8f0; font-size: 0.82rem; padding: 0.35rem 0.65rem;">
-                                                —
-                                            </span>
-                                        <% } %>
-                                    </td>
-                                </tr>
-                            <% } %>
-                        </tbody>
-                    </table>
-                </div>
-            <% } %>
-        </section>
-
-        <!-- ════════════════════════════════════════════════════════════ -->
-        <!-- SECTION 4: UPCOMING CLASSES TIMETABLE                          -->
+        <!-- SECTION 3: UPCOMING CLASSES TIMETABLE                          -->
         <!-- ════════════════════════════════════════════════════════════ -->
         <section class="glass-card" style="margin-bottom: 2rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1.5px solid var(--border-subtle); padding-bottom: 0.75rem;">
@@ -467,7 +312,7 @@
         </section>
 
         <!-- ════════════════════════════════════════════════════════════ -->
-        <!-- SECTION 5: ATTENDANCE HISTORY LOG                              -->
+        <!-- SECTION 4: ATTENDANCE HISTORY LOG                              -->
         <!-- ════════════════════════════════════════════════════════════ -->
         <section class="glass-card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1.5px solid var(--border-subtle); padding-bottom: 0.75rem;">
@@ -491,7 +336,7 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>Timestamp (IST)</th>
+                                <th>Timestamp</th>
                                 <th>Course Code</th>
                                 <th>Course Title</th>
                                 <th>Status</th>
@@ -501,8 +346,8 @@
                         <tbody>
                             <% for (Attendance att : history) { %>
                                 <tr>
-                                    <td style="color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; font-size: 0.88rem;">
-                                        <%= att.getMarkedAt() != null ? DateTimeUtil.formatToIst(att.getMarkedAt()) : "—" %>
+                                    <td style="color: var(--text-secondary);">
+                                        <%= att.getMarkedAt() != null ? att.getMarkedAt().format(dtf) : "—" %>
                                     </td>
                                     <td><strong><%= att.getCourseCode() %></strong></td>
                                     <td><%= att.getCourseName() %></td>

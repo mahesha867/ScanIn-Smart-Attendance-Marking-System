@@ -296,135 +296,6 @@ public class AttendanceDao implements Dao<Attendance> {
     }
 
     /**
-     * Phase 13-C4.6: Concurrency-hardened planned-session attendance transaction.
-     * Prevents race conditions between student QR scan and teacher session closure.
-     * Re-verifies both qr_sessions and planned_sessions under row-level lock (FOR UPDATE)
-     * using the exact table lock ordering as PlannedSessionDao.closeMeetingAndCompleteSession:
-     * qr_sessions first, planned_sessions second.
-     *
-     * If session closure has already taken place or is committing, this transaction acquires the lock,
-     * observes that is_active = false or planned_status != 'ATTENDANCE_OPEN' (or closed/expired),
-     * safely aborts/rolls back, logs CLOSED_SESSION in scan_attempts, and throws IllegalStateException.
-     */
-    public boolean recordPlannedAttendanceTransaction(int studentId, int courseId, int qrSessionId,
-                                                      int plannedSessionId, String status, String tokenHash)
-            throws SQLException, IllegalStateException {
-        String lockAndCheckSql = "SELECT qs.id, qs.is_active, qs.closed_at, qs.expires_at, ps.status AS planned_status " +
-                                 "FROM qr_sessions qs " +
-                                 "JOIN planned_sessions ps ON qs.planned_session_id = ps.id " +
-                                 "WHERE qs.id = ? AND ps.id = ? AND qs.course_id = ? " +
-                                 "FOR UPDATE";
-        String checkEnrollmentSql = "SELECT 1 FROM enrollments WHERE student_id = ? AND course_id = ? AND (status = 'ACTIVE' OR status IS NULL)";
-        String checkExistingAttSql = "SELECT status FROM attendance WHERE qr_session_id = ? AND student_id = ?";
-        String insertAttendanceSql = "INSERT INTO attendance (student_id, course_id, qr_session_id, status) VALUES (?, ?, ?, ?)";
-        String insertAttemptSql = "INSERT INTO scan_attempts (session_id, student_id, token_hash, outcome) VALUES (?, ?, ?, ?)";
-
-        Connection conn = null;
-        try {
-            conn = DBConnection.getInstance().getConnection();
-            conn.setAutoCommit(false); // Begin ACID Transaction
-
-            // 1. Lock and verify session state
-            boolean sessionActive = false;
-            boolean plannedOpen = false;
-            boolean notClosed = false;
-            boolean notExpired = false;
-
-            try (PreparedStatement psLock = conn.prepareStatement(lockAndCheckSql)) {
-                psLock.setInt(1, qrSessionId);
-                psLock.setInt(2, plannedSessionId);
-                psLock.setInt(3, courseId);
-                try (ResultSet rs = psLock.executeQuery()) {
-                    if (rs.next()) {
-                        sessionActive = rs.getBoolean("is_active");
-                        notClosed = (rs.getTimestamp("closed_at") == null);
-                        Timestamp exp = rs.getTimestamp("expires_at");
-                        notExpired = (exp != null && exp.after(new java.util.Date()));
-                        String pStatus = rs.getString("planned_status");
-                        plannedOpen = "ATTENDANCE_OPEN".equals(pStatus);
-                    } else {
-                        throw new IllegalStateException("Session not found or course mismatch");
-                    }
-                }
-            }
-
-            if (!sessionActive || !plannedOpen || !notClosed || !notExpired) {
-                conn.rollback();
-                new ScanAttemptDao().recordAttempt(qrSessionId, studentId, tokenHash, "CLOSED_SESSION");
-                throw new IllegalStateException("This attendance session has ended / is closed.");
-            }
-
-            // 2. Verify enrollment under transaction
-            try (PreparedStatement psEnr = conn.prepareStatement(checkEnrollmentSql)) {
-                psEnr.setInt(1, studentId);
-                psEnr.setInt(2, courseId);
-                try (ResultSet rsEnr = psEnr.executeQuery()) {
-                    if (!rsEnr.next()) {
-                        conn.rollback();
-                        new ScanAttemptDao().recordAttempt(qrSessionId, studentId, tokenHash, "WRONG_COURSE");
-                        throw new IllegalStateException("You are not enrolled in this course.");
-                    }
-                }
-            }
-
-            // 3. Verify no duplicate attendance
-            try (PreparedStatement psAttCheck = conn.prepareStatement(checkExistingAttSql)) {
-                psAttCheck.setInt(1, qrSessionId);
-                psAttCheck.setInt(2, studentId);
-                try (ResultSet rsAtt = psAttCheck.executeQuery()) {
-                    if (rsAtt.next()) {
-                        conn.rollback();
-                        new ScanAttemptDao().recordAttempt(qrSessionId, studentId, tokenHash, "DUPLICATE");
-                        throw new IllegalStateException("Attendance has already been recorded for this session.");
-                    }
-                }
-            }
-
-            // 4. Insert attendance
-            try (PreparedStatement psAtt = conn.prepareStatement(insertAttendanceSql, Statement.RETURN_GENERATED_KEYS)) {
-                psAtt.setInt(1, studentId);
-                psAtt.setInt(2, courseId);
-                psAtt.setInt(3, qrSessionId);
-                psAtt.setString(4, status != null ? status : "PRESENT");
-                psAtt.executeUpdate();
-            }
-
-            // 5. Insert scan attempt audit record
-            try (PreparedStatement psAtm = conn.prepareStatement(insertAttemptSql)) {
-                psAtm.setInt(1, qrSessionId);
-                psAtm.setInt(2, studentId);
-                psAtm.setString(3, tokenHash);
-                psAtm.setString(4, "SUCCESS");
-                psAtm.executeUpdate();
-            }
-
-            conn.commit(); // Commit Transaction
-            return true;
-        } catch (SQLException e) {
-            if (conn != null) {
-                try {
-                    conn.rollback();
-                } catch (SQLException ex) {
-                    ex.printStackTrace();
-                }
-            }
-            if (e.getErrorCode() == 1062 || (e.getMessage() != null && e.getMessage().contains("Duplicate entry"))) {
-                new ScanAttemptDao().recordAttempt(qrSessionId, studentId, tokenHash, "DUPLICATE");
-            }
-            throw e;
-        } finally {
-            if (conn != null) {
-                try {
-                    conn.setAutoCommit(true);
-                    conn.close();
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-    }
-
-    /**
      * Updates attendance status directly (e.g. transitioning from ABSENT to PRESENT when student scans in a reopened session).
      */
     public boolean updateStatus(int attendanceId, String status) {
@@ -611,7 +482,6 @@ public class AttendanceDao implements Dao<Attendance> {
                      "SELECT e.student_id, ?, ?, 'ABSENT' " +
                      "FROM enrollments e " +
                      "WHERE e.course_id = ? " +
-                     "AND (e.status = 'ACTIVE' OR e.status IS NULL) " +
                      "AND NOT EXISTS (" +
                      "    SELECT 1 FROM attendance a " +
                      "    WHERE a.qr_session_id = ? AND a.student_id = e.student_id" +
@@ -641,7 +511,7 @@ public class AttendanceDao implements Dao<Attendance> {
         a.setQrSessionId(rs.getInt("qr_session_id"));
         Timestamp ts = rs.getTimestamp("marked_at");
         if (ts != null) {
-            a.setMarkedAtInstant(ts.toInstant());
+            a.setMarkedAt(ts.toLocalDateTime());
         }
         a.setStatus(rs.getString("status"));
         return a;

@@ -11,13 +11,12 @@
         <welcome-file>login</welcome-file>
     </welcome-file-list>
 
-    <!-- Session Configuration: 30 minutes default; configurable via SESSION_TIMEOUT_MINUTES -->
+    <!-- Session Configuration: 60 minutes -->
     <session-config>
-        <session-timeout>30</session-timeout>
+        <session-timeout>60</session-timeout>
         <cookie-config>
             <http-only>true</http-only>
         </cookie-config>
-        <tracking-mode>COOKIE</tracking-mode>
     </session-config>
 
     <!-- Centralized Security and Role Authorization Filter -->

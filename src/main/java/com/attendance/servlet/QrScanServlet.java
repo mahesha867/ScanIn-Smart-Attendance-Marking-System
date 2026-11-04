@@ -45,7 +45,6 @@ public class QrScanServlet extends HttpServlet {
     private StudentDao studentDao;
     private AttendanceDao attendanceDao;
     private ScanAttemptDao scanAttemptDao;
-    private com.attendance.dao.PlannedSessionDao plannedSessionDao;
 
     @Override
     public void init() throws ServletException {
@@ -54,7 +53,6 @@ public class QrScanServlet extends HttpServlet {
         this.studentDao = new StudentDao();
         this.attendanceDao = new AttendanceDao();
         this.scanAttemptDao = new ScanAttemptDao();
-        this.plannedSessionDao = new com.attendance.dao.PlannedSessionDao();
     }
 
     @Override
@@ -82,50 +80,22 @@ public class QrScanServlet extends HttpServlet {
             student = studentDao.findByUserId(user.getId()).orElse(null);
         }
 
-        // Restore pending token from session if present (e.g. from prior unauthenticated scan)
-        String sessionPending = (String) request.getSession().getAttribute("pendingToken");
-        if (sessionPending != null && !sessionPending.trim().isEmpty()) {
-            if (token == null || token.trim().isEmpty()) {
-                token = sessionPending.trim();
-            }
-            request.getSession().removeAttribute("pendingToken");
+        // If no token in query, open camera scanner page with typed fallback
+        if (token == null || token.trim().isEmpty()) {
+            request.getRequestDispatcher("/WEB-INF/views/qr-scan.jsp").forward(request, response);
+            return;
         }
 
-        // NON-NEGOTIABLE SECURITY RULE: GET must NEVER mutate database state
-        // (zero attendance records, zero scan-attempt records).
-        // If a token parameter was supplied (or restored from pending session),
-        // prefill the token in the scanner view so the student submits it
-        // exclusively through an explicit confirmation click on the CSRF-protected POST path.
-        if (token != null && !token.trim().isEmpty()) {
-            request.setAttribute("prefilledToken", token.trim());
-        }
-        request.setAttribute("csrfToken", SessionUtil.getOrCreateCsrfToken(request));
-        request.getRequestDispatcher("/WEB-INF/views/qr-scan.jsp").forward(request, response);
+        // Process token attendance marking
+        processAttendance(token.trim(), student, request, response, false);
     }
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        // 1. Session authentication check.
         User user = SessionUtil.getLoggedInUser(request);
-        if (user == null) {
-            // Expired unauthenticated session — 401 so the client can redirect to login.
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            sendJsonResponse(response, false, "Session expired. Please log in again.");
-            return;
-        }
-
-        if (!"STUDENT".equalsIgnoreCase(user.getRole())) {
+        if (user == null || !"STUDENT".equalsIgnoreCase(user.getRole())) {
             sendJsonResponse(response, false, "Unauthorized: Only students can mark attendance.");
-            return;
-        }
-
-        // 2. CSRF validation — enforced before reading the token parameter or touching
-        //    any database table, including scan_attempts.
-        if (!SessionUtil.validateCsrfToken(request)) {
-            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-            sendJsonResponse(response, false,
-                "Security validation failed: Invalid or missing CSRF token. Please refresh the page and try again.");
             return;
         }
 
@@ -231,31 +201,6 @@ public class QrScanServlet extends HttpServlet {
             return;
         }
 
-        // 4b. Direct Real-Time Meeting Expiry Enforcement (Independent of background sweep interval)
-        if (session.getExpiresAt() != null) {
-            java.time.LocalDateTime nowUtc = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
-            if (!nowUtc.isBefore(session.getExpiresAt())) {
-                scanAttemptDao.recordAttempt(session.getId(), student.getStudentId(), tokenHash, "EXPIRED_SESSION");
-                handleResult(request, response, isJson, false, "This class meeting has reached its scheduled end time and is no longer accepting attendance.");
-                return;
-            }
-        }
-
-        // 4c. Schedule-Driven Planned Session Status Enforcement
-        if (session.getPlannedSessionId() != null) {
-            try {
-                java.util.Optional<com.attendance.model.PlannedSession> plannedOpt = plannedSessionDao.findById(session.getPlannedSessionId());
-                if (!plannedOpt.isPresent() || !"ATTENDANCE_OPEN".equals(plannedOpt.get().getStatus())) {
-                    scanAttemptDao.recordAttempt(session.getId(), student.getStudentId(), tokenHash, "PLANNED_SESSION_CLOSED");
-                    handleResult(request, response, isJson, false, "Attendance is not currently open for this planned academic session.");
-                    return;
-                }
-            } catch (Exception e) {
-                handleResult(request, response, isJson, false, "Error verifying planned session status.");
-                return;
-            }
-        }
-
         // 5. Student Enrollment Verification
         boolean isEnrolled = courseDao.isStudentEnrolled(student.getStudentId(), session.getCourseId());
         if (!isEnrolled) {
@@ -268,14 +213,6 @@ public class QrScanServlet extends HttpServlet {
         Optional<Attendance> existing = attendanceDao.findBySessionAndStudent(session.getId(), student.getStudentId());
         if (existing.isPresent()) {
             Attendance att = existing.get();
-            // Stage 13-C4.2: Planned sessions enforce a strict one-way lifecycle (no ABSENT-to-PRESENT recovery)
-            if (session.getPlannedSessionId() != null) {
-                scanAttemptDao.recordAttempt(session.getId(), student.getStudentId(), tokenHash, "DUPLICATE");
-                handleResult(request, response, isJson, false, "Attendance has already been recorded for this session.");
-                return;
-            }
-
-            // Ordinary legacy sessions: preserve existing ABSENT-to-PRESENT recovery if reopened
             if (!"ABSENT".equalsIgnoreCase(att.getStatus())) {
                 scanAttemptDao.recordAttempt(session.getId(), student.getStudentId(), tokenHash, "DUPLICATE");
                 handleResult(request, response, isJson, false, "Attendance was already marked for this session.");
@@ -292,17 +229,9 @@ public class QrScanServlet extends HttpServlet {
 
         // 8. ACID Transactional Attendance Recording
         try {
-            boolean saved;
-            if (session.getPlannedSessionId() != null) {
-                saved = attendanceDao.recordPlannedAttendanceTransaction(
-                    student.getStudentId(), session.getCourseId(), session.getId(),
-                    session.getPlannedSessionId(), "PRESENT", tokenHash
-                );
-            } else {
-                saved = attendanceDao.recordAttendanceTransaction(
-                    student.getStudentId(), session.getCourseId(), session.getId(), "PRESENT", tokenHash
-                );
-            }
+            boolean saved = attendanceDao.recordAttendanceTransaction(
+                student.getStudentId(), session.getCourseId(), session.getId(), "PRESENT", tokenHash
+            );
             if (saved) {
                 Optional<Course> c = courseDao.findById(session.getCourseId());
                 String courseTitle = c.map(course -> course.getCourseCode() + " - " + course.getCourseName()).orElse("Course");
@@ -310,8 +239,6 @@ public class QrScanServlet extends HttpServlet {
             } else {
                 handleResult(request, response, isJson, false, "Failed to record attendance. Please try again.");
             }
-        } catch (IllegalStateException e) {
-            handleResult(request, response, isJson, false, e.getMessage());
         } catch (SQLException e) {
             // Handle race condition duplicate constraint violation
             if (e.getErrorCode() == 1062 || (e.getMessage() != null && e.getMessage().contains("Duplicate entry"))) {

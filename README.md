@@ -8,7 +8,7 @@
 [![Jakarta Servlet 6.0](https://img.shields.io/badge/Jakarta%20Servlet-6.0-blueviolet.svg)](https://jakarta.ee/)
 [![MySQL 8.0 / TiDB](https://img.shields.io/badge/MySQL%20%2F%20TiDB-8.0%20Compatible-blue.svg)](https://www.mysql.com/)
 [![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
-[![Automated Tests](https://img.shields.io/badge/Automated%20Tests-92%2F92%20PASS-brightgreen.svg)]()
+[![Automated Tests](https://img.shields.io/badge/Automated%20Tests-85%2F85%20PASS-brightgreen.svg)]()
 
 ---
 
@@ -329,7 +329,6 @@ java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance
 java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance.Stage8VerificationTest
 java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance.ClassMeetingAttendanceVerificationTest
 java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance.QrTimingVerificationTest
-java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance.TimezoneVerificationTest
 ```
 
 | Verification Suite | Target Areas | Tests | Result | Stage Status |
@@ -343,8 +342,7 @@ java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance
 | [`Stage8VerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage8VerificationTest.java) | Session-Bound 6-Digit Code, Database-Backed Rate Limiting, Formula Uniformity, Full Regression | 5 / 5 | ✅ PASS | **Stage 8 Approved** |
 | [`ClassMeetingAttendanceVerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/ClassMeetingAttendanceVerificationTest.java) | Persistent Class Meetings, Ephemeral 7s QR Tokens, UTC Timezone, Reopen Idempotency, Reporting Invariance, Merged Session Exclusion | 10 / 10 | ✅ PASS | Stage 9 Approved |
 | [`QrTimingVerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/QrTimingVerificationTest.java) | 7-Second QR Rotation, 10s Token Validity, Monotonic Synchronization, Step Invariance, Security Regressions | 23 / 23 | ✅ PASS | Stage 10 Approved |
-| [`TimezoneVerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/TimezoneVerificationTest.java) | Indian Standard Time (IST) Display, UTC Storage Invariance, Midnight Crossing, DB/CSV Reporting | 7 / 7 | ✅ PASS | Stage 11 Approved |
-| **Total Automated Tests** | **All Layers & Life-Cycle Flows (7+7+7+7+11+8+5+10+23+7)** | **92 / 92** | **✅ 100% PASS** | **All Stages Approved** |
+| **Total Automated Tests** | **All Layers & Life-Cycle Flows (7+7+7+7+11+8+5+10+23)** | **85 / 85** | **✅ 100% PASS** | **All Stages Approved** |
 
 ---
 
