@@ -46,7 +46,7 @@
                 <!-- Scanning animation overlay -->
                 <div style="position: absolute; inset: 24px; border: 2px solid #733da9; border-radius: 14px; pointer-events: none; box-shadow: 0 0 16px rgba(115, 61, 169, 0.45);"></div>
                 <div id="camera-loading" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.85); color: #fff; font-size: 0.92rem;">
-                    <svg class="ui-icon ui-icon-lg" style="margin-bottom: 0.5rem; color: #a855f7;"><use href="#icon-video"></use></svg>
+                    <svg class="ui-icon ui-icon-md" style="margin-bottom: 0.4rem; color: #c084fc;"><use href="#icon-video"></use></svg>
                     <span>Starting Camera...</span>
                     <span style="font-size: 0.78rem; color: #94a3b8; margin-top: 0.4rem;">Please allow camera permission</span>
                 </div>

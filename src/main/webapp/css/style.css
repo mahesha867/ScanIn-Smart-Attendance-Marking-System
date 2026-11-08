@@ -82,27 +82,58 @@ body {
 /* ── Crisp Vector Icon System (Flaticon Style) ─────────────── */
 .ui-icon {
     display: inline-block;
-    width: 1.2em;
-    height: 1.2em;
-    vertical-align: -0.2em;
+    width: 1.0em;
+    height: 1.0em;
+    vertical-align: -0.15em;
     fill: currentColor;
     stroke: none;
     flex-shrink: 0;
     transition: transform 0.15s ease;
 }
 
-.ui-icon-xs { width: 0.85em; height: 0.85em; vertical-align: -0.1em; }
-.ui-icon-sm { width: 1.05em; height: 1.05em; vertical-align: -0.15em; }
-.ui-icon-md { width: 1.35em; height: 1.35em; vertical-align: -0.22em; }
-.ui-icon-lg { width: 1.75em; height: 1.75em; }
-.ui-icon-xl { width: 2.25em; height: 2.25em; }
+.ui-icon-xs { width: 0.75em; height: 0.75em; vertical-align: -0.08em; }
+.ui-icon-sm { width: 0.88em; height: 0.88em; vertical-align: -0.12em; }
+.ui-icon-md { width: 1.15em; height: 1.15em; vertical-align: -0.16em; }
+.ui-icon-lg { width: 1.35em; height: 1.35em; vertical-align: -0.18em; }
+.ui-icon-xl { width: 1.65em; height: 1.65em; vertical-align: -0.2em; }
+
+/* Contextual Icon Sizing — prevents headers & controls from ballooning */
+h1 > .ui-icon, h2 > .ui-icon, h3 > .ui-icon, h4 > .ui-icon {
+    width: 0.85em;
+    height: 0.85em;
+    vertical-align: -0.1em;
+}
+
+.btn .ui-icon {
+    width: 0.9em;
+    height: 0.9em;
+    vertical-align: -0.12em;
+}
+
+.badge .ui-icon {
+    width: 0.8em;
+    height: 0.8em;
+    vertical-align: -0.08em;
+}
+
+.alert .ui-icon {
+    width: 1.05em;
+    height: 1.05em;
+    vertical-align: -0.15em;
+}
+
+.demo-pill .ui-icon {
+    width: 0.92em;
+    height: 0.92em;
+    vertical-align: -0.12em;
+}
 
 /* ── Navigation Header (Collegiate Deep Purple Block) ──────── */
 .navbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.85rem 2.5rem;
+    padding: 0.75rem 2.5rem;
     background: #582c83;
     border-bottom: 1px solid #431f66;
     position: sticky;
@@ -114,10 +145,10 @@ body {
 .nav-brand {
     display: flex;
     align-items: center;
-    gap: 0.85rem;
+    gap: 0.75rem;
     text-decoration: none;
     color: #ffffff;
-    font-size: 1.25rem;
+    font-size: 1.2rem;
     font-weight: 700;
     letter-spacing: -0.015em;
     transition: opacity 0.15s ease;
@@ -128,8 +159,8 @@ body {
 }
 
 .brand-icon {
-    width: 38px;
-    height: 38px;
+    width: 32px;
+    height: 32px;
     border-radius: var(--radius-sm);
     background: rgba(255, 255, 255, 0.16);
     display: flex;
@@ -141,8 +172,8 @@ body {
 }
 
 .brand-icon .ui-icon {
-    width: 1.45em;
-    height: 1.45em;
+    width: 1.15em;
+    height: 1.15em;
     vertical-align: 0;
 }
 
@@ -266,9 +297,9 @@ body {
 }
 
 .stat-icon {
-    width: 54px;
-    height: 54px;
-    border-radius: var(--radius-md);
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -279,8 +310,8 @@ body {
 }
 
 .stat-icon .ui-icon {
-    width: 1.7em;
-    height: 1.7em;
+    width: 1.3em;
+    height: 1.3em;
 }
 
 .stat-icon.emerald {

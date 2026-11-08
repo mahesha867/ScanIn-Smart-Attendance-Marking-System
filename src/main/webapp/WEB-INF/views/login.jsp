@@ -31,8 +31,8 @@
     <main class="container" style="display:flex; justify-content:center; align-items:center; min-height: calc(100vh - 160px);">
         <div class="glass-card" style="width: 100%; max-width: 440px; border-radius: 16px; box-shadow: var(--shadow-md);">
             <div style="text-align: center; margin-bottom: 2rem;">
-                <div style="width: 56px; height: 56px; margin: 0 auto 1rem; border-radius: 14px; background: var(--purple-subtle); border: 1.5px solid var(--purple-border); display: flex; align-items: center; justify-content: center; color: #582c83;">
-                    <svg class="ui-icon ui-icon-xl"><use href="#icon-scanin"></use></svg>
+                <div style="width: 44px; height: 44px; margin: 0 auto 0.85rem; border-radius: 12px; background: var(--purple-subtle); border: 1.5px solid var(--purple-border); display: flex; align-items: center; justify-content: center; color: #582c83;">
+                    <svg class="ui-icon ui-icon-md"><use href="#icon-scanin"></use></svg>
                 </div>
                 <h1 class="page-title" style="font-size: 1.75rem;">Welcome Back</h1>
                 <p class="page-subtitle">Dynamic 7-Second QR Attendance Portal</p>

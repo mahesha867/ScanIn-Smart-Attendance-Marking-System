@@ -85,9 +85,9 @@
             </div>
 
             <% if (enrolledStudents == null || enrolledStudents.isEmpty()) { %>
-                <div style="text-align: center; padding: 3rem 1rem; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1.5px dashed var(--border-subtle);">
-                    <div style="width: 56px; height: 56px; margin: 0 auto 0.75rem; border-radius: 50%; background: #ffffff; display: flex; align-items: center; justify-content: center; color: var(--text-muted); border: 1px solid var(--border-subtle);">
-                        <svg class="ui-icon ui-icon-lg"><use href="#icon-student"></use></svg>
+                <div style="text-align: center; padding: 2.5rem 1rem; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1.5px dashed var(--border-subtle);">
+                    <div style="width: 42px; height: 42px; margin: 0 auto 0.65rem; border-radius: 50%; background: #ffffff; display: flex; align-items: center; justify-content: center; color: var(--text-muted); border: 1px solid var(--border-subtle);">
+                        <svg class="ui-icon ui-icon-md"><use href="#icon-student"></use></svg>
                     </div>
                     <h3 style="font-size: 1.15rem; font-weight: 700; color: #1e293b; margin-bottom: 0.3rem;">No Students Enrolled Yet</h3>
                     <p style="color: var(--text-muted); font-size: 0.92rem; max-width: 450px; margin: 0 auto;">

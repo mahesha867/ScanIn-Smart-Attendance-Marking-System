@@ -159,9 +159,9 @@
         </div>
 
         <% if (courses == null || courses.isEmpty()) { %>
-            <div class="glass-card" style="text-align: center; padding: 3rem 1rem; border: 1.5px dashed var(--border-subtle); margin-bottom: 2.5rem;">
-                <div style="width: 56px; height: 56px; margin: 0 auto 0.75rem; border-radius: 50%; background: var(--bg-subtle); display: flex; align-items: center; justify-content: center; color: var(--text-muted);">
-                    <svg class="ui-icon ui-icon-lg"><use href="#icon-book"></use></svg>
+            <div class="glass-card" style="text-align: center; padding: 2.5rem 1rem; border: 1.5px dashed var(--border-subtle); margin-bottom: 2.5rem;">
+                <div style="width: 42px; height: 42px; margin: 0 auto 0.65rem; border-radius: 50%; background: var(--bg-subtle); display: flex; align-items: center; justify-content: center; color: var(--text-muted); border: 1px solid var(--border-subtle);">
+                    <svg class="ui-icon ui-icon-md"><use href="#icon-book"></use></svg>
                 </div>
                 <h3 style="font-size: 1.15rem; font-weight: 700; color: #1e293b; margin-bottom: 0.3rem;">No Courses Found</h3>
                 <p style="color: var(--text-muted); font-size: 0.92rem; max-width: 480px; margin: 0 auto 1.25rem auto;">
