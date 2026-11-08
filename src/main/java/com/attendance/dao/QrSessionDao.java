@@ -242,6 +242,32 @@ public class QrSessionDao implements Dao<QrSession> {
         return sessions;
     }
 
+    /**
+     * Finds all distinct active and past QR sessions for a specific course, ordered newest first.
+     */
+    public List<QrSession> findByCourseId(int courseId) {
+        List<QrSession> sessions = new ArrayList<>();
+        String sql = "SELECT qs.*, c.course_code, c.course_name, u.name AS teacher_name " +
+                     "FROM qr_sessions qs " +
+                     "JOIN courses c ON qs.course_id = c.id " +
+                     "JOIN teachers t ON qs.teacher_id = t.teacher_id " +
+                     "JOIN users u ON t.user_id = u.id " +
+                     "WHERE qs.course_id = ? AND qs.session_token NOT LIKE 'MERGED_INTO_%' " +
+                     "ORDER BY qs.id DESC";
+        try (Connection conn = DBConnection.getInstance().getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, courseId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    sessions.add(mapResultSetToQrSession(rs));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return sessions;
+    }
+
     @Override
     public boolean save(QrSession session) {
         if (session.getSessionToken() == null || session.getSessionToken().trim().isEmpty() || "pending_init".equals(session.getSessionToken())) {

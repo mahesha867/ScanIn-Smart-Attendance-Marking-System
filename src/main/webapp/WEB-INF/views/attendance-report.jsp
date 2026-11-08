@@ -2,6 +2,7 @@
 <%@ page import="com.attendance.model.Attendance" %>
 <%@ page import="com.attendance.model.AttendanceAuditLog" %>
 <%@ page import="com.attendance.model.Course" %>
+<%@ page import="com.attendance.model.QrSession" %>
 <%@ page import="com.attendance.model.User" %>
 <%@ page import="java.time.format.DateTimeFormatter" %>
 <%@ page import="java.util.List" %>
@@ -12,7 +13,19 @@
     List<Attendance> attendanceList = (List<Attendance>) request.getAttribute("attendanceList");
     List<AttendanceAuditLog> auditLogs = (List<AttendanceAuditLog>) request.getAttribute("auditLogs");
     Integer selectedCourseId = (Integer) request.getAttribute("selectedCourseId");
+    List<QrSession> courseSessions = (List<QrSession>) request.getAttribute("courseSessions");
+    Integer selectedSessionId = (Integer) request.getAttribute("selectedSessionId");
     DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a");
+
+    QrSession selectedSession = null;
+    if (selectedSessionId != null && courseSessions != null) {
+        for (QrSession qs : courseSessions) {
+            if (qs.getId() == selectedSessionId) {
+                selectedSession = qs;
+                break;
+            }
+        }
+    }
 
     int totalLogs = attendanceList != null ? attendanceList.size() : 0;
     int totalPresent = 0;
@@ -87,8 +100,10 @@
                 <svg class="ui-icon ui-icon-xs"><use href="#icon-arrow-left"></use></svg>
                 <span>Dashboard</span>
             </a>
-            <% if (selectedCourseId != null && selectedCourseId > 0) { %>
-                <a href="${pageContext.request.contextPath}/reports?courseId=<%= selectedCourseId %>&format=csv" class="btn btn-primary btn-sm" id="csvExportBtn">
+            <% if (selectedCourseId != null && selectedCourseId > 0) { 
+                String csvExportUrl = request.getContextPath() + "/reports?courseId=" + selectedCourseId + ((selectedSessionId != null && selectedSessionId > 0) ? "&sessionId=" + selectedSessionId : "") + "&format=csv";
+            %>
+                <a href="<%= csvExportUrl %>" class="btn btn-primary btn-sm" id="csvExportBtn">
                     <svg class="ui-icon ui-icon-xs"><use href="#icon-download"></use></svg>
                     <span>Export CSV</span>
                 </a>
@@ -103,10 +118,12 @@
                 <p class="page-subtitle">Track live scans, manual overrides, OD approvals, and immutable audit logs</p>
             </div>
             <div style="display: flex; gap: 0.75rem; align-items: center;">
-                <% if (selectedCourseId != null && selectedCourseId > 0) { %>
-                    <a href="${pageContext.request.contextPath}/reports?courseId=<%= selectedCourseId %>&format=csv" class="btn btn-primary">
+                <% if (selectedCourseId != null && selectedCourseId > 0) { 
+                    String csvExportUrl = request.getContextPath() + "/reports?courseId=" + selectedCourseId + ((selectedSessionId != null && selectedSessionId > 0) ? "&sessionId=" + selectedSessionId : "") + "&format=csv";
+                %>
+                    <a href="<%= csvExportUrl %>" class="btn btn-primary">
                         <svg class="ui-icon ui-icon-sm"><use href="#icon-download"></use></svg>
-                        <span>Download CSV Report</span>
+                        <span><%= (selectedSessionId != null && selectedSessionId > 0) ? "Download Session CSV" : "Download CSV Report" %></span>
                     </a>
                 <% } %>
                 <button type="button" class="btn btn-secondary" onclick="window.print()">
@@ -132,25 +149,70 @@
             </div>
         <% } %>
 
-        <!-- Course Selector Bar -->
-        <div class="card" style="padding: 1.25rem 1.75rem; margin-bottom: 1.75rem; background: #ffffff; border: 1px solid var(--border-card); border-radius: 14px;">
-            <form action="${pageContext.request.contextPath}/reports" method="GET" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-                <label for="courseSelect" style="font-weight: 700; font-size: 0.9rem; color: #334155; display: flex; align-items: center; gap: 0.4rem;">
-                    <svg class="ui-icon ui-icon-xs" style="color: #582c83;"><use href="#icon-book"></use></svg>
-                    <span>Select Course:</span>
-                </label>
-                <select id="courseSelect" name="courseId" class="form-input" style="width: auto; min-width: 280px;" onchange="this.form.submit()">
-                    <% if (courses != null) {
-                        for (Course c : courses) { %>
-                            <option value="<%= c.getId() %>" <%= (selectedCourseId != null && selectedCourseId == c.getId()) ? "selected" : "" %>>
-                                <%= c.getCourseCode() %> &bull; <%= c.getCourseName() %>
-                            </option>
-                    <%  }
-                    } %>
-                </select>
-                <input type="text" id="searchInput" placeholder="Filter by Student or Roll No..." class="form-input" style="width: auto; min-width: 260px; margin-left: auto;" onkeyup="filterTable()">
+        <!-- Course & Session Selector Bar -->
+        <div class="card" style="padding: 1.25rem 1.75rem; margin-bottom: 1.5rem; background: #ffffff; border: 1px solid var(--border-card); border-radius: 14px;">
+            <form id="filterForm" action="${pageContext.request.contextPath}/reports" method="GET" style="display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <label for="courseSelect" style="font-weight: 700; font-size: 0.9rem; color: #334155; display: flex; align-items: center; gap: 0.4rem;">
+                        <svg class="ui-icon ui-icon-xs" style="color: #582c83;"><use href="#icon-book"></use></svg>
+                        <span>Course:</span>
+                    </label>
+                    <select id="courseSelect" name="courseId" class="form-input" style="width: auto; min-width: 240px;" onchange="onCourseChanged()">
+                        <% if (courses != null) {
+                            for (Course c : courses) { %>
+                                <option value="<%= c.getId() %>" <%= (selectedCourseId != null && selectedCourseId == c.getId()) ? "selected" : "" %>>
+                                    <%= c.getCourseCode() %> &bull; <%= c.getCourseName() %>
+                                </option>
+                        <%  }
+                        } %>
+                    </select>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <label for="sessionSelect" style="font-weight: 700; font-size: 0.9rem; color: #334155; display: flex; align-items: center; gap: 0.4rem;">
+                        <svg class="ui-icon ui-icon-xs" style="color: #582c83;"><use href="#icon-calendar"></use></svg>
+                        <span>Session:</span>
+                    </label>
+                    <select id="sessionSelect" name="sessionId" class="form-input" style="width: auto; min-width: 270px;" onchange="this.form.submit()">
+                        <option value="all" <%= (selectedSessionId == null) ? "selected" : "" %>>All Sessions (Consolidated)</option>
+                        <% if (courseSessions != null && !courseSessions.isEmpty()) {
+                            for (QrSession qs : courseSessions) { %>
+                                <option value="<%= qs.getId() %>" <%= (selectedSessionId != null && selectedSessionId == qs.getId()) ? "selected" : "" %>>
+                                    #SES-<%= qs.getId() %> &bull; <%= qs.getCreatedAt() != null ? qs.getCreatedAt().format(dtf) : "Session " + qs.getId() %><%= qs.isActive() ? " (Active)" : "" %>
+                                </option>
+                        <%  }
+                        } %>
+                    </select>
+                </div>
+
+                <div style="margin-left: auto; display: flex; align-items: center;">
+                    <input type="text" id="searchInput" placeholder="Filter by Student or Roll No..." class="form-input" style="width: auto; min-width: 240px;" onkeyup="filterTable()">
+                </div>
             </form>
         </div>
+
+        <% if (selectedSessionId != null && selectedSessionId > 0) { %>
+            <div style="display: flex; align-items: center; justify-content: space-between; background: #faf5ff; border: 1px solid #d8b4fe; border-radius: 12px; padding: 0.85rem 1.25rem; margin-bottom: 1.75rem; flex-wrap: wrap; gap: 0.75rem;">
+                <div style="display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
+                    <span class="badge" style="background: #582c83; color: #ffffff; font-weight: 700; font-size: 0.85rem; padding: 0.35rem 0.75rem;">
+                        Session #SES-<%= selectedSessionId %>
+                    </span>
+                    <span style="color: #4c1d95; font-size: 0.9rem; font-weight: 600;">
+                        Filtered view: Showing attendance records exclusively for Session #SES-<%= selectedSessionId %>
+                        <% if (selectedSession != null && selectedSession.getCreatedAt() != null) { %>
+                            &bull; Held on <%= selectedSession.getCreatedAt().format(dtf) %>
+                            <% if (selectedSession.isActive()) { %>
+                                <span style="color: #15803d; font-weight: 700;">(&bull; Currently Active)</span>
+                            <% } %>
+                        <% } %>
+                    </span>
+                </div>
+                <a href="${pageContext.request.contextPath}/reports?courseId=<%= selectedCourseId %>&sessionId=all" class="btn btn-secondary btn-sm" style="background: #ffffff; border: 1px solid #c084fc;">
+                    <svg class="ui-icon ui-icon-xs"><use href="#icon-close"></use></svg>
+                    <span>Clear Filter (Show All)</span>
+                </a>
+            </div>
+        <% } %>
 
         <!-- Metric Summary Cards -->
         <div class="grid-cols-4" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
@@ -185,7 +247,7 @@
             <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
                 <h2 style="font-size: 1.15rem; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 0.45rem;">
                     <svg class="ui-icon ui-icon-xs" style="color: #582c83;"><use href="#icon-chart"></use></svg>
-                    <span>Attendance Records</span>
+                    <span><%= (selectedSessionId != null && selectedSessionId > 0) ? ("Attendance Records &bull; Session #SES-" + selectedSessionId) : "Attendance Records (All Sessions)" %></span>
                 </h2>
                 <span style="font-size: 0.85rem; color: #64748b;"><%= attendanceList != null ? attendanceList.size() : 0 %> records found</span>
             </div>
@@ -224,9 +286,13 @@
                                         <%= a.getMarkedAt() != null ? a.getMarkedAt().format(dtf) : "N/A" %>
                                     </td>
                                     <td style="padding: 0.85rem 1.25rem;">
-                                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: #64748b;">
-                                            #SES-<%= a.getQrSessionId() %>
-                                        </span>
+                                        <a href="${pageContext.request.contextPath}/reports?courseId=<%= selectedCourseId %>&sessionId=<%= a.getQrSessionId() %>" 
+                                           title="Filter to session #SES-<%= a.getQrSessionId() %>" 
+                                           style="text-decoration: none; display: inline-block;">
+                                            <span class="badge" style="background: <%= (selectedSessionId != null && selectedSessionId == a.getQrSessionId()) ? "#582c83; color: #ffffff;" : "rgba(88, 44, 131, 0.08); color: var(--color-purple);" %> font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; font-weight: 700; cursor: pointer;">
+                                                #SES-<%= a.getQrSessionId() %>
+                                            </span>
+                                        </a>
                                     </td>
                                     <td style="padding: 0.85rem 1.25rem;">
                                         <span class="badge <%= badgeClass %>" style="padding: 0.28rem 0.65rem; border-radius: 6px; font-size: 0.8rem; font-weight: 700;">
@@ -376,6 +442,12 @@
     </footer>
 
     <script>
+        function onCourseChanged() {
+            const sessSelect = document.getElementById("sessionSelect");
+            if (sessSelect) sessSelect.value = "all";
+            document.getElementById("filterForm").submit();
+        }
+
         function filterTable() {
             const input = document.getElementById("searchInput");
             const filter = input.value.toLowerCase();

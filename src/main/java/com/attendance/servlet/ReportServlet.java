@@ -3,10 +3,12 @@ package com.attendance.servlet;
 import com.attendance.dao.AttendanceAuditLogDao;
 import com.attendance.dao.AttendanceDao;
 import com.attendance.dao.CourseDao;
+import com.attendance.dao.QrSessionDao;
 import com.attendance.dao.TeacherDao;
 import com.attendance.model.Attendance;
 import com.attendance.model.AttendanceAuditLog;
 import com.attendance.model.Course;
+import com.attendance.model.QrSession;
 import com.attendance.model.Teacher;
 import com.attendance.model.User;
 import com.attendance.util.SessionUtil;
@@ -32,6 +34,7 @@ public class ReportServlet extends HttpServlet {
     private AttendanceAuditLogDao auditLogDao;
     private CourseDao courseDao;
     private TeacherDao teacherDao;
+    private QrSessionDao qrSessionDao;
 
     @Override
     public void init() throws ServletException {
@@ -39,6 +42,7 @@ public class ReportServlet extends HttpServlet {
         this.auditLogDao = new AttendanceAuditLogDao();
         this.courseDao = new CourseDao();
         this.teacherDao = new TeacherDao();
+        this.qrSessionDao = new QrSessionDao();
     }
 
     @Override
@@ -95,16 +99,45 @@ public class ReportServlet extends HttpServlet {
             request.setAttribute("selectedCourse", selectedCourse);
             request.setAttribute("selectedCourseId", courseId);
 
-            List<Attendance> attendanceList = attendanceDao.findByCourse(courseId);
-            request.setAttribute("attendanceList", attendanceList);
+            // Fetch all sessions conducted for this course
+            List<QrSession> courseSessions = qrSessionDao.findByCourseId(courseId);
+            request.setAttribute("courseSessions", courseSessions);
 
-            List<AttendanceAuditLog> auditLogs = auditLogDao.findByCourse(courseId);
+            String sessionIdParam = request.getParameter("sessionId");
+            Integer selectedSessionId = null;
+            if (sessionIdParam != null && !sessionIdParam.trim().isEmpty() && !"all".equalsIgnoreCase(sessionIdParam.trim())) {
+                try {
+                    int parsedSid = Integer.parseInt(sessionIdParam.trim());
+                    if (courseSessions != null) {
+                        for (QrSession qs : courseSessions) {
+                            if (qs.getId() == parsedSid) {
+                                selectedSessionId = parsedSid;
+                                break;
+                            }
+                        }
+                    }
+                } catch (NumberFormatException ignored) {}
+            }
+            request.setAttribute("selectedSessionId", selectedSessionId);
+
+            List<Attendance> attendanceList;
+            List<AttendanceAuditLog> auditLogs;
+
+            if (selectedSessionId != null && selectedSessionId > 0) {
+                attendanceList = attendanceDao.findByCourseAndSession(courseId, selectedSessionId);
+                auditLogs = auditLogDao.findBySession(selectedSessionId);
+            } else {
+                attendanceList = attendanceDao.findByCourse(courseId);
+                auditLogs = auditLogDao.findByCourse(courseId);
+            }
+
+            request.setAttribute("attendanceList", attendanceList);
             request.setAttribute("auditLogs", auditLogs);
 
             // Handle CSV Export
             String format = request.getParameter("format");
             if ("csv".equalsIgnoreCase(format)) {
-                exportCsv(response, selectedCourse, attendanceList);
+                exportCsv(response, selectedCourse, attendanceList, selectedSessionId);
                 return;
             }
         }
@@ -112,8 +145,12 @@ public class ReportServlet extends HttpServlet {
         request.getRequestDispatcher("/WEB-INF/views/attendance-report.jsp").forward(request, response);
     }
 
-    private void exportCsv(HttpServletResponse response, Course course, List<Attendance> attendanceList) throws IOException {
-        String filename = "attendance_report_" + course.getCourseCode().replaceAll("[^a-zA-Z0-9_-]", "_") + ".csv";
+    private void exportCsv(HttpServletResponse response, Course course, List<Attendance> attendanceList, Integer sessionId) throws IOException {
+        String baseName = "attendance_report_" + course.getCourseCode().replaceAll("[^a-zA-Z0-9_-]", "_");
+        if (sessionId != null && sessionId > 0) {
+            baseName += "_session_" + sessionId;
+        }
+        String filename = baseName + ".csv";
         response.setContentType("text/csv; charset=UTF-8");
         response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
 

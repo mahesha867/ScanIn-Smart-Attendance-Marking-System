@@ -133,6 +133,30 @@ public class AttendanceDao implements Dao<Attendance> {
         return list;
     }
 
+    public List<Attendance> findByCourseAndSession(int courseId, int qrSessionId) {
+        List<Attendance> list = new ArrayList<>();
+        String sql = "SELECT a.*, u.name AS student_name, s.roll_number, c.course_code, c.course_name " +
+                     "FROM attendance a " +
+                     "JOIN students s ON a.student_id = s.student_id " +
+                     "JOIN users u ON s.user_id = u.id " +
+                     "JOIN courses c ON a.course_id = c.id " +
+                     "WHERE a.course_id = ? AND a.qr_session_id = ? " +
+                     "ORDER BY a.marked_at DESC";
+        try (Connection conn = DBConnection.getInstance().getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, courseId);
+            ps.setInt(2, qrSessionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(mapResultSetToAttendance(rs));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
     /**
      * Calculates consistent attendance percentage.
      * College policy: Attended sessions = (PRESENT + LATE + OD).
