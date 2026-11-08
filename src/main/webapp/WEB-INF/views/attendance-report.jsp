@@ -83,6 +83,66 @@
             box-shadow: 0 20px 25px -5px rgba(0,0,0,0.25);
             border: 1px solid #e2e8f0;
         }
+
+        /* Responsive 3-Column Integrated Filter Bar */
+        .report-filter-bar {
+            display: grid;
+            grid-template-columns: minmax(240px, 1.35fr) minmax(210px, 1.15fr) minmax(220px, 1.2fr);
+            gap: 1.15rem;
+            align-items: center;
+            width: 100%;
+        }
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            min-width: 0;
+        }
+        .filter-group label {
+            font-weight: 700;
+            font-size: 0.88rem;
+            color: #334155;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            white-space: nowrap;
+        }
+        .filter-group select {
+            flex: 1;
+            min-width: 0;
+            padding: 0.62rem 0.85rem;
+            text-overflow: ellipsis;
+        }
+        .filter-search {
+            position: relative;
+            display: flex;
+            align-items: center;
+            min-width: 0;
+            width: 100%;
+        }
+        .filter-search input {
+            width: 100%;
+            padding: 0.62rem 0.85rem 0.62rem 2.35rem;
+        }
+        .filter-search .search-icon {
+            position: absolute;
+            left: 0.85rem;
+            color: #94a3b8;
+            pointer-events: none;
+        }
+        @media (max-width: 992px) {
+            .report-filter-bar {
+                grid-template-columns: 1fr 1fr;
+            }
+            .filter-search {
+                grid-column: 1 / -1;
+            }
+        }
+        @media (max-width: 640px) {
+            .report-filter-bar {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
@@ -150,14 +210,14 @@
         <% } %>
 
         <!-- Course & Session Selector Bar -->
-        <div class="card" style="padding: 1.25rem 1.75rem; margin-bottom: 1.5rem; background: #ffffff; border: 1px solid var(--border-card); border-radius: 14px;">
-            <form id="filterForm" action="${pageContext.request.contextPath}/reports" method="GET" style="display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap;">
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <label for="courseSelect" style="font-weight: 700; font-size: 0.9rem; color: #334155; display: flex; align-items: center; gap: 0.4rem;">
+        <div class="card" style="padding: 1.15rem 1.5rem; margin-bottom: 1.5rem; background: #ffffff; border: 1px solid var(--border-card); border-radius: 14px;">
+            <form id="filterForm" class="report-filter-bar" action="${pageContext.request.contextPath}/reports" method="GET">
+                <div class="filter-group">
+                    <label for="courseSelect">
                         <svg class="ui-icon ui-icon-xs" style="color: #582c83;"><use href="#icon-book"></use></svg>
                         <span>Course:</span>
                     </label>
-                    <select id="courseSelect" name="courseId" class="form-input" style="width: auto; min-width: 240px;" onchange="onCourseChanged()">
+                    <select id="courseSelect" name="courseId" class="form-input" onchange="onCourseChanged()">
                         <% if (courses != null) {
                             for (Course c : courses) { %>
                                 <option value="<%= c.getId() %>" <%= (selectedCourseId != null && selectedCourseId == c.getId()) ? "selected" : "" %>>
@@ -168,12 +228,12 @@
                     </select>
                 </div>
 
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <label for="sessionSelect" style="font-weight: 700; font-size: 0.9rem; color: #334155; display: flex; align-items: center; gap: 0.4rem;">
+                <div class="filter-group">
+                    <label for="sessionSelect">
                         <svg class="ui-icon ui-icon-xs" style="color: #582c83;"><use href="#icon-calendar"></use></svg>
                         <span>Session:</span>
                     </label>
-                    <select id="sessionSelect" name="sessionId" class="form-input" style="width: auto; min-width: 270px;" onchange="this.form.submit()">
+                    <select id="sessionSelect" name="sessionId" class="form-input" onchange="this.form.submit()">
                         <option value="all" <%= (selectedSessionId == null) ? "selected" : "" %>>All Sessions (Consolidated)</option>
                         <% if (courseSessions != null && !courseSessions.isEmpty()) {
                             for (QrSession qs : courseSessions) { %>
@@ -185,8 +245,9 @@
                     </select>
                 </div>
 
-                <div style="margin-left: auto; display: flex; align-items: center;">
-                    <input type="text" id="searchInput" placeholder="Filter by Student or Roll No..." class="form-input" style="width: auto; min-width: 240px;" onkeyup="filterTable()">
+                <div class="filter-search">
+                    <svg class="ui-icon ui-icon-xs search-icon"><use href="#icon-search"></use></svg>
+                    <input type="text" id="searchInput" placeholder="Filter by Student or Roll No..." class="form-input" onkeyup="filterTable()">
                 </div>
             </form>
         </div>
