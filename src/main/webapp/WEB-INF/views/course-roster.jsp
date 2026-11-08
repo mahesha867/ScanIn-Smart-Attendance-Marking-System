@@ -24,11 +24,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
+    <%@ include file="common-icons.jspf" %>
 
     <!-- Header Navigation -->
     <nav class="navbar">
         <a href="${pageContext.request.contextPath}/teacher/dashboard" class="nav-brand">
-            <div class="brand-icon">👨‍🏫</div>
+            <div class="brand-icon">
+                <svg class="ui-icon"><use href="#icon-teacher"></use></svg>
+            </div>
             <span>ScanIn Faculty Portal</span>
         </a>
         <div class="nav-actions">
@@ -36,7 +39,10 @@
                 <span class="role-pill teacher">FACULTY</span>
                 <span><%= user != null ? user.getName() : "Faculty" %></span>
             </span>
-            <a href="${pageContext.request.contextPath}/logout" class="btn btn-secondary btn-sm">Sign Out</a>
+            <a href="${pageContext.request.contextPath}/logout" class="btn btn-secondary btn-sm">
+                <svg class="ui-icon ui-icon-xs"><use href="#icon-logout"></use></svg>
+                <span>Sign Out</span>
+            </a>
         </div>
     </nav>
 
@@ -44,7 +50,8 @@
         <!-- Breadcrumb & Back -->
         <div style="margin-bottom: 1.25rem;">
             <a href="${pageContext.request.contextPath}/teacher/dashboard" class="btn btn-secondary btn-sm">
-                ← Back to Faculty Dashboard
+                <svg class="ui-icon ui-icon-xs"><use href="#icon-arrow-left"></use></svg>
+                <span>Back to Faculty Dashboard</span>
             </a>
         </div>
 
@@ -54,21 +61,23 @@
                     <%= course != null ? course.getCourseCode() + ": " + course.getCourseName() : "Course Roster" %>
                 </h1>
                 <p class="page-subtitle">
-                    <%= course != null ? course.getDepartment() + " • Semester " + course.getSemester() + " • Faculty: " + teacher.getName() : "" %>
+                    <%= course != null ? course.getDepartment() + " &bull; Semester " + course.getSemester() + " &bull; Faculty: " + (teacher != null ? teacher.getName() : "") : "" %>
                 </p>
             </div>
             <div>
                 <a href="${pageContext.request.contextPath}/qr/generate?courseId=<%= course != null ? course.getId() : "" %>" class="btn btn-primary">
-                    📱 Launch Live QR Session
+                    <svg class="ui-icon ui-icon-sm"><use href="#icon-qr"></use></svg>
+                    <span>Launch Live QR Session</span>
                 </a>
             </div>
         </header>
 
         <!-- Roster Card -->
-        <section class="glass-card">
+        <section class="glass-card" style="border-radius: 16px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1.5px solid var(--border-subtle); padding-bottom: 0.75rem;">
-                <h2 style="font-size: 1.25rem; font-weight: 700; color: #582c83;">
-                    👥 Enrolled Student Roster
+                <h2 style="font-size: 1.25rem; font-weight: 700; color: #582c83; display: flex; align-items: center; gap: 0.5rem;">
+                    <svg class="ui-icon ui-icon-sm"><use href="#icon-users"></use></svg>
+                    <span>Enrolled Student Roster</span>
                 </h2>
                 <span class="badge badge-present" style="font-size: 0.8rem;">
                     Total Enrolled: <%= enrolledStudents != null ? enrolledStudents.size() : 0 %>
@@ -76,9 +85,10 @@
             </div>
 
             <% if (enrolledStudents == null || enrolledStudents.isEmpty()) { %>
-                <!-- Empty State: No Students Enrolled -->
                 <div style="text-align: center; padding: 3rem 1rem; background: var(--bg-subtle); border-radius: var(--radius-sm); border: 1.5px dashed var(--border-subtle);">
-                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">👨‍🎓</div>
+                    <div style="width: 56px; height: 56px; margin: 0 auto 0.75rem; border-radius: 50%; background: #ffffff; display: flex; align-items: center; justify-content: center; color: var(--text-muted); border: 1px solid var(--border-subtle);">
+                        <svg class="ui-icon ui-icon-lg"><use href="#icon-student"></use></svg>
+                    </div>
                     <h3 style="font-size: 1.15rem; font-weight: 700; color: #1e293b; margin-bottom: 0.3rem;">No Students Enrolled Yet</h3>
                     <p style="color: var(--text-muted); font-size: 0.92rem; max-width: 450px; margin: 0 auto;">
                         No students have registered for this course yet. Once students enroll from their portal, their academic details and attendance records will appear here.
@@ -105,8 +115,12 @@
                                 boolean isWarning = pct < 75.0;
                             %>
                                 <tr>
-                                    <td><strong><%= s.getRollNumber() %></strong></td>
-                                    <td><%= s.getName() %></td>
+                                    <td>
+                                        <span class="badge" style="background: rgba(88, 44, 131, 0.08); color: var(--color-purple); font-family: 'JetBrains Mono', monospace; font-weight: 700;">
+                                            <%= s.getRollNumber() %>
+                                        </span>
+                                    </td>
+                                    <td style="font-weight: 600; color: #1e293b;"><%= s.getName() %></td>
                                     <td style="color: var(--text-secondary);"><%= s.getEmail() %></td>
                                     <td><%= s.getDepartment() %></td>
                                     <td>Sem <%= s.getSemester() %></td>
@@ -120,9 +134,15 @@
                                     </td>
                                     <td>
                                         <% if (isWarning) { %>
-                                            <span class="badge badge-absent">⚠️ Low (&lt; 75%)</span>
+                                            <span class="badge badge-absent">
+                                                <svg class="ui-icon ui-icon-xs"><use href="#icon-alert"></use></svg>
+                                                <span>Low (&lt; 75%)</span>
+                                            </span>
                                         <% } else { %>
-                                            <span class="badge badge-present">✓ Eligible</span>
+                                            <span class="badge badge-present">
+                                                <svg class="ui-icon ui-icon-xs"><use href="#icon-check"></use></svg>
+                                                <span>Eligible</span>
+                                            </span>
                                         <% } %>
                                     </td>
                                 </tr>
@@ -135,7 +155,7 @@
     </main>
 
     <footer class="footer">
-        <p>ScanIn Smart Attendance System • Faculty Course Management • College DBMS Project</p>
+        <p>ScanIn Smart Attendance System &bull; Faculty Course Management &bull; College DBMS Project</p>
     </footer>
 
 </body>

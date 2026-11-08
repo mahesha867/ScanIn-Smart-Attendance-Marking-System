@@ -8,63 +8,72 @@
     <link rel="stylesheet" href="${pageContext.request.contextPath}/css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
     <!-- jsQR scanner library for in-browser client camera decoding -->
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 </head>
 <body>
+    <%@ include file="common-icons.jspf" %>
 
     <nav class="navbar">
         <a href="${pageContext.request.contextPath}/student/dashboard" class="nav-brand">
-            <div class="brand-icon">📷</div>
+            <div class="brand-icon">
+                <svg class="ui-icon"><use href="#icon-camera"></use></svg>
+            </div>
             <span>SmartAttendance &bull; Camera Scanner</span>
         </a>
         <div class="nav-actions">
             <a href="${pageContext.request.contextPath}/student/dashboard" class="btn btn-secondary btn-sm">
-                ← Back to Dashboard
+                <svg class="ui-icon ui-icon-xs"><use href="#icon-arrow-left"></use></svg>
+                <span>Back to Dashboard</span>
             </a>
         </div>
     </nav>
 
     <main class="container" style="display:flex; justify-content:center; align-items:center;">
-        <div class="glass-card" style="width: 100%; max-width: 520px; text-align: center;">
+        <div class="glass-card" style="width: 100%; max-width: 520px; text-align: center; border-radius: 18px; box-shadow: var(--shadow-md);">
             
-            <h1 class="page-title" style="font-size: 1.6rem; margin-bottom: 0.3rem;">Scan Classroom QR</h1>
-            <p class="page-subtitle" style="margin-bottom: 1.5rem;">Align the live QR code on the teacher's screen within the box</p>
+            <h1 class="page-title" style="font-size: 1.65rem; margin-bottom: 0.35rem;">Scan Classroom QR</h1>
+            <p class="page-subtitle" style="margin-bottom: 1.5rem;">Align the live QR code on the instructor's display within the frame</p>
 
-            <div id="scan-feedback" style="display: none; margin-bottom: 1rem;"></div>
+            <div id="scan-feedback" style="display: none; margin-bottom: 1.25rem;"></div>
 
             <!-- Video Camera Viewfinder Box -->
-            <div style="position: relative; width: 100%; max-width: 360px; height: 320px; margin: 0 auto 1.5rem; border-radius: var(--radius-md); overflow: hidden; background: #000; border: 2px dashed rgba(99, 102, 241, 0.4);">
+            <div style="position: relative; width: 100%; max-width: 360px; height: 320px; margin: 0 auto 1.5rem; border-radius: var(--radius-md); overflow: hidden; background: #0f172a; border: 2px solid #582c83; box-shadow: 0 4px 16px rgba(88, 44, 131, 0.15);">
                 <video id="video" style="width: 100%; height: 100%; object-fit: cover;" playsinline></video>
                 <canvas id="qr-canvas" style="display: none;"></canvas>
 
                 <!-- Scanning animation overlay -->
-                <div style="position: absolute; inset: 20px; border: 2px solid #6366f1; border-radius: 12px; pointer-events: none; box-shadow: 0 0 15px rgba(99, 102, 241, 0.5);"></div>
-                <div id="camera-loading" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.7); color: #fff; font-size: 0.9rem;">
-                    <span>🎥 Starting Camera...</span>
+                <div style="position: absolute; inset: 24px; border: 2px solid #733da9; border-radius: 14px; pointer-events: none; box-shadow: 0 0 16px rgba(115, 61, 169, 0.45);"></div>
+                <div id="camera-loading" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.85); color: #fff; font-size: 0.92rem;">
+                    <svg class="ui-icon ui-icon-lg" style="margin-bottom: 0.5rem; color: #a855f7;"><use href="#icon-video"></use></svg>
+                    <span>Starting Camera...</span>
                     <span style="font-size: 0.78rem; color: #94a3b8; margin-top: 0.4rem;">Please allow camera permission</span>
                 </div>
             </div>
 
             <div style="display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 1.5rem;">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="startCamera()">Restart Camera</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="startCamera()">
+                    <svg class="ui-icon ui-icon-xs"><use href="#icon-refresh"></use></svg>
+                    <span>Restart Camera</span>
+                </button>
             </div>
 
             <!-- Manual 6-Digit Code & Token Fallback Section -->
-            <div style="border-top: 1px solid var(--border-subtle); padding-top: 1.25rem;">
-                <label for="manual-token" style="display: block; font-size: 0.88rem; font-weight: 600; color: #582c83; margin-bottom: 0.5rem;">
-                    🔢 Or Enter 6-Digit Code / Token
+            <div style="border-top: 1px solid var(--border-subtle); padding-top: 1.35rem;">
+                <label for="manual-token" style="display: flex; align-items: center; justify-content: center; gap: 0.4rem; font-size: 0.88rem; font-weight: 700; color: #582c83; margin-bottom: 0.65rem;">
+                    <svg class="ui-icon ui-icon-xs"><use href="#icon-keypad"></use></svg>
+                    <span>Or Enter 6-Digit Code / Token</span>
                 </label>
                 <div style="display: flex; gap: 0.5rem;">
                     <input type="text" id="manual-token" class="form-input" 
-                           placeholder="e.g. 492018 or full token..." 
+                           placeholder="e.g. 492018 or token..." 
                            style="font-size: 0.95rem; font-family: 'JetBrains Mono', monospace; text-align: center; letter-spacing: 0.1em;" 
                            aria-label="Enter 6-digit attendance code or session token"
                            maxlength="250">
                     <button type="button" class="btn btn-primary btn-sm" onclick="submitManualToken()">Verify Code</button>
                 </div>
-                <p style="font-size: 0.78rem; color: #64748b; margin-top: 0.4rem; margin-bottom: 0;">
+                <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.5rem; margin-bottom: 0;">
                     Type the 6-digit code displayed on the classroom screen if your camera cannot scan.
                 </p>
             </div>
@@ -92,7 +101,7 @@
                 loading.style.display = "none";
                 requestAnimationFrame(tick);
             } catch (err) {
-                loading.innerHTML = "<span style='color:#f87171;'>⚠️ Camera unavailable</span><span style='font-size:0.75rem; color:#94a3b8; margin-top:0.3rem;'>Use manual token verification below</span>";
+                loading.innerHTML = "<span style='color:#f87171; display:flex; align-items:center; gap:0.35rem;'><svg class='ui-icon ui-icon-sm'><use href='#icon-alert'></use></svg> Camera unavailable</span><span style='font-size:0.75rem; color:#94a3b8; margin-top:0.3rem;'>Use manual token verification below</span>";
             }
         }
 
@@ -155,7 +164,7 @@
 
             feedback.style.display = "block";
             feedback.className = "alert alert-info";
-            feedback.innerText = "⏳ Verifying attendance token...";
+            feedback.innerHTML = "<svg class='ui-icon ui-icon-sm'><use href='#icon-clock'></use></svg> <span>Verifying attendance token...</span>";
 
             try {
                 const response = await fetch("${pageContext.request.contextPath}/qr/scan", {
@@ -169,7 +178,7 @@
 
                 if (response.status === 401) {
                     feedback.className = "alert alert-danger";
-                    feedback.innerText = "⚠️ Session expired. Please log in again.";
+                    feedback.innerHTML = "<svg class='ui-icon ui-icon-sm'><use href='#icon-alert'></use></svg> <span>Session expired. Please log in again.</span>";
                     setTimeout(() => {
                         window.location.href = "${pageContext.request.contextPath}/login?msg=session_expired";
                     }, 1500);
@@ -181,7 +190,7 @@
                     res = await response.json();
                 } catch (jsonErr) {
                     feedback.className = "alert alert-danger";
-                    feedback.innerText = "⚠️ Verification response was invalid. Please try again.";
+                    feedback.innerHTML = "<svg class='ui-icon ui-icon-sm'><use href='#icon-alert'></use></svg> <span>Verification response was invalid. Please try again.</span>";
                     setTimeout(() => {
                         isSubmitting = false;
                         scanning = true;
@@ -192,13 +201,13 @@
 
                 if (res.success) {
                     feedback.className = "alert alert-success";
-                    feedback.innerText = "✅ " + res.message;
+                    feedback.innerHTML = "<svg class='ui-icon ui-icon-sm'><use href='#icon-check'></use></svg> <span>" + res.message + "</span>";
                     setTimeout(() => {
                         window.location.href = "${pageContext.request.contextPath}/student/dashboard";
                     }, 1500);
                 } else {
                     feedback.className = "alert alert-danger";
-                    feedback.innerText = "⚠️ " + res.message;
+                    feedback.innerHTML = "<svg class='ui-icon ui-icon-sm'><use href='#icon-alert'></use></svg> <span>" + res.message + "</span>";
                     // Provide 2.5s cooling-off period so student can read message, then resume scanning
                     setTimeout(() => {
                         isSubmitting = false;
@@ -208,7 +217,7 @@
                 }
             } catch (e) {
                 feedback.className = "alert alert-danger";
-                feedback.innerText = "⚠️ Network error while verifying attendance. Retrying in 2 seconds...";
+                feedback.innerHTML = "<svg class='ui-icon ui-icon-sm'><use href='#icon-alert'></use></svg> <span>Network error while verifying attendance. Retrying in 2 seconds...</span>";
                 setTimeout(() => {
                     isSubmitting = false;
                     scanning = true;
