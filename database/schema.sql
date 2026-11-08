@@ -74,6 +74,21 @@ CREATE TABLE IF NOT EXISTS enrollments (
 );
 
 -- -------------------------------------------------------
+-- Table: course_schedules (Course semester timetable / planned lecture sessions)
+-- -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS course_schedules (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    course_id   INT NOT NULL,
+    day_of_week VARCHAR(15) NOT NULL,
+    start_time  TIME NOT NULL,
+    end_time    TIME NOT NULL,
+    room        VARCHAR(50),
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_schedule_course (course_id),
+    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+);
+
+-- -------------------------------------------------------
 -- Table: qr_sessions (Dynamic QR codes generated per class)
 -- -------------------------------------------------------
 CREATE TABLE IF NOT EXISTS qr_sessions (

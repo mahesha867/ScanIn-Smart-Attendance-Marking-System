@@ -87,6 +87,36 @@ public class AppContextListener implements ServletContextListener {
                 stmt.executeUpdate("ALTER TABLE attendance MODIFY COLUMN status ENUM('PRESENT','ABSENT','LATE','OD','EXCUSED') DEFAULT 'PRESENT'");
             } catch (Exception ignored) {}
 
+            // 2d. Ensure course_schedules table exists (course semester timetable / planned sessions)
+            try {
+                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS course_schedules (" +
+                        "id INT AUTO_INCREMENT PRIMARY KEY, " +
+                        "course_id INT NOT NULL, " +
+                        "day_of_week VARCHAR(15) NOT NULL, " +
+                        "start_time TIME NOT NULL, " +
+                        "end_time TIME NOT NULL, " +
+                        "room VARCHAR(50), " +
+                        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, " +
+                        "INDEX idx_schedule_course (course_id), " +
+                        "FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE)");
+                System.out.println("[AppContextListener] Ensured course_schedules table exists.");
+            } catch (Exception e1) {
+                try {
+                    stmt.executeUpdate("CREATE TABLE IF NOT EXISTS course_schedules (" +
+                            "id INT AUTO_INCREMENT PRIMARY KEY, " +
+                            "course_id INT NOT NULL, " +
+                            "day_of_week VARCHAR(15) NOT NULL, " +
+                            "start_time TIME NOT NULL, " +
+                            "end_time TIME NOT NULL, " +
+                            "room VARCHAR(50), " +
+                            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, " +
+                            "INDEX idx_schedule_course (course_id))");
+                    System.out.println("[AppContextListener] Ensured course_schedules table exists (without FK constraint).");
+                } catch (Exception e2) {
+                    System.out.println("[AppContextListener] course_schedules table notice: " + e2.getMessage());
+                }
+            }
+
             // 3. Clean up any corrupted legacy 'pending_init' sessions so they never block new sessions
             try {
                 stmt.executeUpdate("UPDATE qr_sessions SET session_token = CONCAT('cleaned_', id, '_', UNIX_TIMESTAMP()), is_active = FALSE, closed_at = UTC_TIMESTAMP() WHERE session_token = 'pending_init' OR session_token LIKE 'pending_init%'");

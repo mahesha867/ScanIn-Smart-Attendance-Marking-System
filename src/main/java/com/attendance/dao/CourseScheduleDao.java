@@ -12,6 +12,21 @@ import java.util.List;
  */
 public class CourseScheduleDao {
 
+    private void ensureTableExists(Connection conn) {
+        String sql = "CREATE TABLE IF NOT EXISTS course_schedules (" +
+                     "id INT AUTO_INCREMENT PRIMARY KEY, " +
+                     "course_id INT NOT NULL, " +
+                     "day_of_week VARCHAR(15) NOT NULL, " +
+                     "start_time TIME NOT NULL, " +
+                     "end_time TIME NOT NULL, " +
+                     "room VARCHAR(50), " +
+                     "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, " +
+                     "INDEX idx_schedule_course (course_id))";
+        try (Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate(sql);
+        } catch (SQLException ignored) {}
+    }
+
     public List<CourseSchedule> findByCourseId(int courseId) {
         List<CourseSchedule> list = new ArrayList<>();
         String sql = "SELECT cs.*, c.course_code, c.course_name, u.name as teacher_name " +
@@ -20,13 +35,16 @@ public class CourseScheduleDao {
                      "JOIN teachers t ON c.teacher_id = t.teacher_id " +
                      "JOIN users u ON t.user_id = u.id " +
                      "WHERE cs.course_id = ? ORDER BY cs.start_time ASC";
-        try (Connection conn = DBConnection.getInstance().getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, courseId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    list.add(mapResultSet(rs));
+        try (Connection conn = DBConnection.getInstance().getConnection()) {
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, courseId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        list.add(mapResultSet(rs));
+                    }
                 }
+            } catch (SQLException ex) {
+                ensureTableExists(conn);
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -47,13 +65,16 @@ public class CourseScheduleDao {
                      "JOIN users u ON t.user_id = u.id " +
                      "WHERE e.student_id = ? " +
                      "ORDER BY FIELD(cs.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), cs.start_time ASC";
-        try (Connection conn = DBConnection.getInstance().getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, studentId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    list.add(mapResultSet(rs));
+        try (Connection conn = DBConnection.getInstance().getConnection()) {
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, studentId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        list.add(mapResultSet(rs));
+                    }
                 }
+            } catch (SQLException ex) {
+                ensureTableExists(conn);
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -63,23 +84,45 @@ public class CourseScheduleDao {
 
     public boolean save(CourseSchedule schedule) {
         String sql = "INSERT INTO course_schedules (course_id, day_of_week, start_time, end_time, room) VALUES (?, ?, ?, ?, ?)";
-        try (Connection conn = DBConnection.getInstance().getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setInt(1, schedule.getCourseId());
-            ps.setString(2, schedule.getDayOfWeek());
-            ps.setTime(3, schedule.getStartTime());
-            ps.setTime(4, schedule.getEndTime());
-            ps.setString(5, schedule.getRoom());
-            int affected = ps.executeUpdate();
-            if (affected > 0) {
-                try (ResultSet keys = ps.getGeneratedKeys()) {
-                    if (keys.next()) {
-                        schedule.setId(keys.getInt(1));
+        try (Connection conn = DBConnection.getInstance().getConnection()) {
+            try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                ps.setInt(1, schedule.getCourseId());
+                ps.setString(2, schedule.getDayOfWeek());
+                ps.setTime(3, schedule.getStartTime());
+                ps.setTime(4, schedule.getEndTime());
+                ps.setString(5, schedule.getRoom());
+                int affected = ps.executeUpdate();
+                if (affected > 0) {
+                    try (ResultSet keys = ps.getGeneratedKeys()) {
+                        if (keys.next()) {
+                            schedule.setId(keys.getInt(1));
+                        }
+                    }
+                    return true;
+                }
+            } catch (SQLException ex) {
+                // Self-healing: if course_schedules table is missing, auto-create it and retry
+                System.out.println("[CourseScheduleDao] First attempt failed (" + ex.getMessage() + "), ensuring table exists and retrying...");
+                ensureTableExists(conn);
+                try (PreparedStatement psRetry = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                    psRetry.setInt(1, schedule.getCourseId());
+                    psRetry.setString(2, schedule.getDayOfWeek());
+                    psRetry.setTime(3, schedule.getStartTime());
+                    psRetry.setTime(4, schedule.getEndTime());
+                    psRetry.setString(5, schedule.getRoom());
+                    int affected = psRetry.executeUpdate();
+                    if (affected > 0) {
+                        try (ResultSet keys = psRetry.getGeneratedKeys()) {
+                            if (keys.next()) {
+                                schedule.setId(keys.getInt(1));
+                            }
+                        }
+                        return true;
                     }
                 }
-                return true;
             }
         } catch (SQLException e) {
+            System.err.println("[CourseScheduleDao] Fatal error saving course schedule: " + e.getMessage());
             e.printStackTrace();
         }
         return false;
