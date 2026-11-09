@@ -4,6 +4,7 @@
 <%@ page import="com.attendance.model.Course" %>
 <%@ page import="com.attendance.model.QrSession" %>
 <%@ page import="com.attendance.model.User" %>
+<%@ page import="com.attendance.util.DateTimeUtil" %>
 <%@ page import="java.time.format.DateTimeFormatter" %>
 <%@ page import="java.util.List" %>
 <%
@@ -238,7 +239,7 @@
                         <% if (courseSessions != null && !courseSessions.isEmpty()) {
                             for (QrSession qs : courseSessions) { %>
                                 <option value="<%= qs.getId() %>" <%= (selectedSessionId != null && selectedSessionId == qs.getId()) ? "selected" : "" %>>
-                                    #SES-<%= qs.getId() %> &bull; <%= qs.getScheduleFormatted() != null ? ("[" + qs.getScheduleFormatted() + "] &bull; ") : "" %><%= qs.getCreatedAt() != null ? qs.getCreatedAt().format(dtf) : "Session " + qs.getId() %><%= qs.isActive() ? " (Active)" : "" %>
+                                    #SES-<%= qs.getId() %> &bull; <%= qs.getScheduleFormatted() != null ? ("[" + qs.getScheduleFormatted() + "] &bull; ") : "" %><%= qs.getCreatedAt() != null ? DateTimeUtil.formatToIst(qs.getCreatedAt()) : "Session " + qs.getId() %><%= qs.isActive() ? " (Active)" : "" %>
                                 </option>
                         <%  }
                         } %>
@@ -264,7 +265,7 @@
                             &bull; <strong>Scheduled: <%= selectedSession.getScheduleFormatted() %></strong>
                         <% } %>
                         <% if (selectedSession != null && selectedSession.getCreatedAt() != null) { %>
-                            &bull; Held on <%= selectedSession.getCreatedAt().format(dtf) %>
+                            &bull; Held on <%= DateTimeUtil.formatToIst(selectedSession.getCreatedAt()) %>
                             <% if (selectedSession.isActive()) { %>
                                 <span style="color: #15803d; font-weight: 700;">(&bull; Currently Active)</span>
                             <% } %>
@@ -347,7 +348,7 @@
                                         <%= a.getStudentName() %>
                                     </td>
                                     <td style="padding: 0.85rem 1.25rem; color: #475569; font-size: 0.88rem;">
-                                        <%= a.getMarkedAt() != null ? a.getMarkedAt().format(dtf) : "N/A" %>
+                                        <%= DateTimeUtil.formatToIst(a.getMarkedAt()) %>
                                     </td>
                                     <td style="padding: 0.85rem 1.25rem;">
                                         <a href="${pageContext.request.contextPath}/reports?courseId=<%= selectedCourseId %>&sessionId=<%= a.getQrSessionId() %>" 
@@ -422,7 +423,7 @@
                             for (AttendanceAuditLog log : auditLogs) { %>
                                 <tr style="border-bottom: 1px solid #f1f5f9;">
                                     <td style="padding: 0.85rem 1.25rem; font-size: 0.85rem; color: #475569;">
-                                        <%= log.getCreatedAt() != null ? log.getCreatedAt().format(dtf) : "N/A" %>
+                                        <%= DateTimeUtil.formatToIst(log.getCreatedAt()) %>
                                     </td>
                                     <td style="padding: 0.85rem 1.25rem;">
                                         <div style="font-weight: 600; color: #1e293b;"><%= log.getStudentName() != null ? log.getStudentName() : ("Student #" + log.getStudentId()) %></div>

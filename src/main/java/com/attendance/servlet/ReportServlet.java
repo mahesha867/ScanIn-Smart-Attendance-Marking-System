@@ -11,6 +11,7 @@ import com.attendance.model.Course;
 import com.attendance.model.QrSession;
 import com.attendance.model.Teacher;
 import com.attendance.model.User;
+import com.attendance.util.DateTimeUtil;
 import com.attendance.util.SessionUtil;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -157,10 +158,9 @@ public class ReportServlet extends HttpServlet {
         PrintWriter writer = response.getWriter();
         writer.println("Attendance ID,Course Code,Roll Number,Student Name,Marked At,Status,Session ID");
 
-        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         if (attendanceList != null) {
             for (Attendance a : attendanceList) {
-                String markedAtStr = a.getMarkedAt() != null ? a.getMarkedAt().format(dtf) : "N/A";
+                String markedAtStr = a.getMarkedAt() != null ? DateTimeUtil.formatToIstStandard(a.getMarkedAt()) : "N/A";
                 writer.println(String.format("%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%d",
                         a.getId(),
                         escapeCsv(a.getCourseCode() != null ? a.getCourseCode() : course.getCourseCode()),

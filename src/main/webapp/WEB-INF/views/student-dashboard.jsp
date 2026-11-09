@@ -4,6 +4,7 @@
 <%@ page import="com.attendance.model.CourseSchedule" %>
 <%@ page import="com.attendance.model.Student" %>
 <%@ page import="com.attendance.model.User" %>
+<%@ page import="com.attendance.util.DateTimeUtil" %>
 <%@ page import="java.time.format.DateTimeFormatter" %>
 <%@ page import="java.util.List" %>
 <%@ page import="java.util.Map" %>
@@ -374,7 +375,7 @@
                             <% for (Attendance att : history) { %>
                                 <tr>
                                     <td style="color: var(--text-secondary);">
-                                        <%= att.getMarkedAt() != null ? att.getMarkedAt().format(dtf) : "&mdash;" %>
+                                        <%= att.getMarkedAt() != null ? DateTimeUtil.formatToIst(att.getMarkedAt()) : "&mdash;" %>
                                     </td>
                                     <td><strong><%= att.getCourseCode() %></strong></td>
                                     <td>
