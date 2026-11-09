@@ -20,31 +20,87 @@ public class CourseScheduleDao {
                      "start_time TIME NOT NULL, " +
                      "end_time TIME NOT NULL, " +
                      "room VARCHAR(50), " +
+                     "is_conducted BOOLEAN DEFAULT FALSE, " +
                      "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, " +
                      "INDEX idx_schedule_course (course_id))";
         try (Statement stmt = conn.createStatement()) {
             stmt.executeUpdate(sql);
+            try {
+                stmt.executeUpdate("ALTER TABLE course_schedules ADD COLUMN IF NOT EXISTS is_conducted BOOLEAN DEFAULT FALSE");
+            } catch (Exception ignored) {}
         } catch (SQLException ignored) {}
+    }
+
+    /**
+     * Marks a planned lecture timeslot as conducted/completed once attendance has been finalized.
+     */
+    public boolean markAsConducted(int scheduleId) {
+        String sql = "UPDATE course_schedules SET is_conducted = TRUE WHERE id = ?";
+        try (Connection conn = DBConnection.getInstance().getConnection()) {
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, scheduleId);
+                return ps.executeUpdate() > 0;
+            } catch (SQLException ex) {
+                ensureTableExists(conn);
+                try (PreparedStatement psRetry = conn.prepareStatement(sql)) {
+                    psRetry.setInt(1, scheduleId);
+                    return psRetry.executeUpdate() > 0;
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     public List<CourseSchedule> findByCourseId(int courseId) {
         List<CourseSchedule> list = new ArrayList<>();
-        String sql = "SELECT cs.*, c.course_code, c.course_name, u.name as teacher_name " +
+        // Only return planned schedules that have not been conducted or closed yet
+        String sqlWithConducted = "SELECT cs.*, c.course_code, c.course_name, u.name as teacher_name " +
                      "FROM course_schedules cs " +
                      "JOIN courses c ON cs.course_id = c.id " +
                      "JOIN teachers t ON c.teacher_id = t.teacher_id " +
                      "JOIN users u ON t.user_id = u.id " +
-                     "WHERE cs.course_id = ? ORDER BY cs.start_time ASC";
+                     "WHERE cs.course_id = ? " +
+                     "AND (cs.is_conducted IS NULL OR cs.is_conducted = FALSE) " +
+                     "AND cs.id NOT IN (" +
+                     "    SELECT qs.schedule_id FROM qr_sessions qs " +
+                     "    WHERE qs.schedule_id IS NOT NULL AND qs.is_active = FALSE" +
+                     ") " +
+                     "ORDER BY cs.start_time ASC";
+
+        String sqlFallback = "SELECT cs.*, c.course_code, c.course_name, u.name as teacher_name " +
+                     "FROM course_schedules cs " +
+                     "JOIN courses c ON cs.course_id = c.id " +
+                     "JOIN teachers t ON c.teacher_id = t.teacher_id " +
+                     "JOIN users u ON t.user_id = u.id " +
+                     "WHERE cs.course_id = ? " +
+                     "AND cs.id NOT IN (" +
+                     "    SELECT qs.schedule_id FROM qr_sessions qs " +
+                     "    WHERE qs.schedule_id IS NOT NULL AND qs.is_active = FALSE" +
+                     ") " +
+                     "ORDER BY cs.start_time ASC";
+
         try (Connection conn = DBConnection.getInstance().getConnection()) {
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            try (PreparedStatement ps = conn.prepareStatement(sqlWithConducted)) {
                 ps.setInt(1, courseId);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         list.add(mapResultSet(rs));
                     }
+                    return list;
                 }
             } catch (SQLException ex) {
-                ensureTableExists(conn);
+                // If is_conducted column is not present or query throws, run fallback
+                try (PreparedStatement psFallback = conn.prepareStatement(sqlFallback)) {
+                    psFallback.setInt(1, courseId);
+                    try (ResultSet rs = psFallback.executeQuery()) {
+                        while (rs.next()) {
+                            list.add(mapResultSet(rs));
+                        }
+                        return list;
+                    }
+                }
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -54,27 +110,56 @@ public class CourseScheduleDao {
 
     /**
      * Retrieves upcoming classes scheduled for all courses in which the student is enrolled.
+     * Excludes already-conducted/closed classes.
      */
     public List<CourseSchedule> findUpcomingClassesForStudent(int studentId) {
         List<CourseSchedule> list = new ArrayList<>();
-        String sql = "SELECT cs.*, c.course_code, c.course_name, u.name as teacher_name " +
+        String sqlWithConducted = "SELECT cs.*, c.course_code, c.course_name, u.name as teacher_name " +
                      "FROM course_schedules cs " +
                      "JOIN courses c ON cs.course_id = c.id " +
                      "JOIN enrollments e ON c.id = e.course_id " +
                      "JOIN teachers t ON c.teacher_id = t.teacher_id " +
                      "JOIN users u ON t.user_id = u.id " +
                      "WHERE e.student_id = ? " +
+                     "AND (cs.is_conducted IS NULL OR cs.is_conducted = FALSE) " +
+                     "AND cs.id NOT IN (" +
+                     "    SELECT qs.schedule_id FROM qr_sessions qs " +
+                     "    WHERE qs.schedule_id IS NOT NULL AND qs.is_active = FALSE" +
+                     ") " +
                      "ORDER BY FIELD(cs.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), cs.start_time ASC";
+
+        String sqlFallback = "SELECT cs.*, c.course_code, c.course_name, u.name as teacher_name " +
+                     "FROM course_schedules cs " +
+                     "JOIN courses c ON cs.course_id = c.id " +
+                     "JOIN enrollments e ON c.id = e.course_id " +
+                     "JOIN teachers t ON c.teacher_id = t.teacher_id " +
+                     "JOIN users u ON t.user_id = u.id " +
+                     "WHERE e.student_id = ? " +
+                     "AND cs.id NOT IN (" +
+                     "    SELECT qs.schedule_id FROM qr_sessions qs " +
+                     "    WHERE qs.schedule_id IS NOT NULL AND qs.is_active = FALSE" +
+                     ") " +
+                     "ORDER BY FIELD(cs.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), cs.start_time ASC";
+
         try (Connection conn = DBConnection.getInstance().getConnection()) {
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            try (PreparedStatement ps = conn.prepareStatement(sqlWithConducted)) {
                 ps.setInt(1, studentId);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         list.add(mapResultSet(rs));
                     }
+                    return list;
                 }
             } catch (SQLException ex) {
-                ensureTableExists(conn);
+                try (PreparedStatement psFallback = conn.prepareStatement(sqlFallback)) {
+                    psFallback.setInt(1, studentId);
+                    try (ResultSet rs = psFallback.executeQuery()) {
+                        while (rs.next()) {
+                            list.add(mapResultSet(rs));
+                        }
+                        return list;
+                    }
+                }
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -150,11 +235,29 @@ public class CourseScheduleDao {
     }
 
     public boolean delete(int id) {
-        String sql = "DELETE FROM course_schedules WHERE id = ?";
-        try (Connection conn = DBConnection.getInstance().getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, id);
-            return ps.executeUpdate() > 0;
+        // If this schedule is already associated with past sessions/reports, mark it conducted
+        // so reports preserve its session metadata while removing it from planned lists.
+        String checkUsageSql = "SELECT COUNT(*) FROM qr_sessions WHERE schedule_id = ?";
+        try (Connection conn = DBConnection.getInstance().getConnection()) {
+            boolean hasHistory = false;
+            try (PreparedStatement psCheck = conn.prepareStatement(checkUsageSql)) {
+                psCheck.setInt(1, id);
+                try (ResultSet rs = psCheck.executeQuery()) {
+                    if (rs.next() && rs.getInt(1) > 0) {
+                        hasHistory = true;
+                    }
+                }
+            } catch (SQLException ignored) {}
+
+            if (hasHistory) {
+                return markAsConducted(id);
+            }
+
+            String sql = "DELETE FROM course_schedules WHERE id = ?";
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, id);
+                return ps.executeUpdate() > 0;
+            }
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -172,6 +275,9 @@ public class CourseScheduleDao {
         cs.setStartTime(rs.getTime("start_time"));
         cs.setEndTime(rs.getTime("end_time"));
         cs.setRoom(rs.getString("room"));
+        try {
+            cs.setConducted(rs.getBoolean("is_conducted"));
+        } catch (SQLException ignored) {}
         Timestamp ts = rs.getTimestamp("created_at");
         if (ts != null) cs.setCreatedAt(ts.toLocalDateTime());
         return cs;

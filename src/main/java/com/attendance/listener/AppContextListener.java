@@ -130,6 +130,17 @@ public class AppContextListener implements ServletContextListener {
                 }
             }
 
+            // 2e. Ensure is_conducted column exists in course_schedules
+            try {
+                stmt.executeUpdate("ALTER TABLE course_schedules ADD COLUMN IF NOT EXISTS is_conducted BOOLEAN DEFAULT FALSE");
+                System.out.println("[AppContextListener] Ensured course_schedules.is_conducted column exists.");
+            } catch (Exception e1) {
+                try {
+                    stmt.executeUpdate("ALTER TABLE course_schedules ADD COLUMN is_conducted BOOLEAN DEFAULT FALSE");
+                    System.out.println("[AppContextListener] Added course_schedules.is_conducted column.");
+                } catch (Exception ignored) {}
+            }
+
             // 3. Clean up any corrupted legacy 'pending_init' sessions so they never block new sessions
             try {
                 stmt.executeUpdate("UPDATE qr_sessions SET session_token = CONCAT('cleaned_', id, '_', UNIX_TIMESTAMP()), is_active = FALSE, closed_at = UTC_TIMESTAMP() WHERE session_token = 'pending_init' OR session_token LIKE 'pending_init%'");

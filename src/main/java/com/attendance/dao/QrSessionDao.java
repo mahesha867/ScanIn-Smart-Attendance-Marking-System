@@ -141,16 +141,23 @@ public class QrSessionDao implements Dao<QrSession> {
      * who have not marked attendance as ABSENT.
      */
     public boolean closeSession(int sessionId) {
-        String selectSql = "SELECT course_id FROM qr_sessions WHERE id = ?";
+        String selectSql = "SELECT course_id, schedule_id FROM qr_sessions WHERE id = ?";
         String updateSql = "UPDATE qr_sessions SET is_active = FALSE, closed_at = CURRENT_TIMESTAMP WHERE id = ?";
 
         int courseId = 0;
+        Integer scheduleId = null;
         try (Connection conn = DBConnection.getInstance().getConnection()) {
             try (PreparedStatement psSelect = conn.prepareStatement(selectSql)) {
                 psSelect.setInt(1, sessionId);
                 try (ResultSet rs = psSelect.executeQuery()) {
                     if (rs.next()) {
                         courseId = rs.getInt("course_id");
+                        try {
+                            int sId = rs.getInt("schedule_id");
+                            if (!rs.wasNull() && sId > 0) {
+                                scheduleId = sId;
+                            }
+                        } catch (SQLException ignored) {}
                     } else {
                         return false;
                     }
@@ -164,6 +171,10 @@ public class QrSessionDao implements Dao<QrSession> {
                     // Mark unmarked enrolled students as ABSENT
                     if (courseId > 0) {
                         new AttendanceDao().markUnmarkedStudentsAbsent(sessionId, courseId);
+                    }
+                    // Mark the associated planned lecture timeslot as conducted so it is removed from planned sessions list
+                    if (scheduleId != null && scheduleId > 0) {
+                        new CourseScheduleDao().markAsConducted(scheduleId);
                     }
                     return true;
                 }
@@ -216,11 +227,17 @@ public class QrSessionDao implements Dao<QrSession> {
     }
 
     public void deactivateOlderSessions(int courseId) {
-        String sql = "UPDATE qr_sessions SET is_active = FALSE, closed_at = CURRENT_TIMESTAMP WHERE course_id = ? AND is_active = TRUE";
+        String findOlder = "SELECT id FROM qr_sessions WHERE course_id = ? AND is_active = TRUE";
         try (Connection conn = DBConnection.getInstance().getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+             PreparedStatement ps = conn.prepareStatement(findOlder)) {
             ps.setInt(1, courseId);
-            ps.executeUpdate();
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Integer> ids = new ArrayList<>();
+                while (rs.next()) ids.add(rs.getInt("id"));
+                for (int id : ids) {
+                    closeSession(id);
+                }
+            }
         } catch (SQLException e) {
             e.printStackTrace();
         }

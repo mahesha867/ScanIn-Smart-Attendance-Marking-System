@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS course_schedules (
     start_time  TIME NOT NULL,
     end_time    TIME NOT NULL,
     room        VARCHAR(50),
+    is_conducted BOOLEAN DEFAULT FALSE,
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_schedule_course (course_id),
     FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE

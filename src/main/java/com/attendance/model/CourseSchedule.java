@@ -17,6 +17,7 @@ public class CourseSchedule {
     private Time startTime;
     private Time endTime;
     private String room;
+    private boolean conducted;
     private LocalDateTime createdAt;
 
     public CourseSchedule() {}
@@ -57,6 +58,9 @@ public class CourseSchedule {
 
     public String getRoom() { return room; }
     public void setRoom(String room) { this.room = room; }
+
+    public boolean isConducted() { return conducted; }
+    public void setConducted(boolean conducted) { this.conducted = conducted; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

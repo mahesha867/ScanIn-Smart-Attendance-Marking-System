@@ -240,6 +240,26 @@ public class QrGenerateServlet extends HttpServlet {
             } catch (NumberFormatException ignored) {}
         }
 
+        // If no scheduleId passed explicitly, auto-detect if this course has a planned timeslot active right now
+        if (scheduleId == null) {
+            List<CourseSchedule> courseSchedules = scheduleDao.findByCourseId(courseId);
+            java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+            String currentDay = istNow.getDayOfWeek().toString();
+            java.time.LocalTime nowTime = istNow.toLocalTime();
+            for (CourseSchedule cs : courseSchedules) {
+                if (cs.getDayOfWeek() != null && cs.getDayOfWeek().equalsIgnoreCase(currentDay)
+                        && cs.getStartTime() != null && cs.getEndTime() != null) {
+                    java.time.LocalTime st = cs.getStartTime().toLocalTime().minusMinutes(15);
+                    java.time.LocalTime et = cs.getEndTime().toLocalTime().plusMinutes(15);
+                    if (!nowTime.isBefore(st) && !nowTime.isAfter(et)) {
+                        scheduleId = cs.getId();
+                        selectedSchedule = cs;
+                        break;
+                    }
+                }
+            }
+        }
+
         // Retrieve existing active meeting session or initialize a single persistent class meeting
         Optional<QrSession> activeOpt = qrSessionDao.findActiveByCourseId(courseId);
         QrSession session;
