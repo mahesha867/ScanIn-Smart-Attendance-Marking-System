@@ -1,7 +1,9 @@
 <%@ page contentType="text/html;charset=UTF-8" language="java" %>
 <%@ page import="com.attendance.model.Course" %>
+<%@ page import="com.attendance.model.CourseSchedule" %>
 <%
     Course course = (Course) request.getAttribute("course");
+    CourseSchedule schedule = (CourseSchedule) request.getAttribute("schedule");
     String sessionToken = (String) request.getAttribute("sessionToken");
     String scanUrl = (String) request.getAttribute("scanUrl");
     int sessionId = request.getAttribute("sessionId") != null ? (Integer) request.getAttribute("sessionId") : 0;
@@ -53,8 +55,21 @@
                 <span class="badge" style="background: rgba(88, 44, 131, 0.08); color: var(--color-purple); font-weight: 700; border: 1px solid rgba(88, 44, 131, 0.2); font-size: 0.92rem; padding: 0.45rem 1.2rem; border-radius: 20px;">
                     <%= course != null ? course.getCourseCode() : "" %> &bull; <%= course != null ? course.getCourseName() : "" %>
                 </span>
+                <% if (schedule != null) { %>
+                    <div style="margin-top: 0.75rem; background: #faf5ff; border: 1px solid #d8b4fe; border-radius: 12px; padding: 0.55rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; text-align: left;">
+                        <svg class="ui-icon ui-icon-xs" style="color: #582c83;"><use href="#icon-calendar"></use></svg>
+                        <span style="font-size: 0.85rem; color: #4c1d95; font-weight: 600;">
+                            Scheduled Timeslot: <strong><%= schedule.getDayOfWeek() %>, <%= schedule.getStartTime().toString().substring(0, 5) %> &ndash; <%= schedule.getEndTime().toString().substring(0, 5) %></strong>
+                            <% if (schedule.getRoom() != null && !schedule.getRoom().trim().isEmpty()) { %>
+                                &bull; Room: <strong><%= schedule.getRoom().trim() %></strong>
+                            <% } %>
+                        </span>
+                    </div>
+                <% } %>
                 <h1 class="page-title" style="margin-top: 0.85rem; font-size: 2.1rem; color: #0f172a;">Dynamic Attendance QR</h1>
-                <p class="page-subtitle" style="color: #64748b;">Cryptographically server-signed tokens rotate every 7 seconds</p>
+                <p class="page-subtitle" style="color: #64748b;">
+                    <%= schedule != null ? "Attendance marked during this session will be recorded for this scheduled lecture." : "Cryptographically server-signed tokens rotate every 7 seconds" %>
+                </p>
             </div>
 
             <!-- 7-Second Countdown Timer -->

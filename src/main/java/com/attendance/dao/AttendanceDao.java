@@ -66,11 +66,14 @@ public class AttendanceDao implements Dao<Attendance> {
 
     public List<Attendance> findByCourse(int courseId) {
         List<Attendance> list = new ArrayList<>();
-        String sql = "SELECT a.*, u.name AS student_name, s.roll_number, c.course_code, c.course_name " +
+        String sql = "SELECT a.*, u.name AS student_name, s.roll_number, c.course_code, c.course_name, " +
+                     "cs.day_of_week AS schedule_day, cs.start_time AS schedule_start, cs.end_time AS schedule_end, cs.room AS schedule_room " +
                      "FROM attendance a " +
                      "JOIN students s ON a.student_id = s.student_id " +
                      "JOIN users u ON s.user_id = u.id " +
                      "JOIN courses c ON a.course_id = c.id " +
+                     "LEFT JOIN qr_sessions qs ON a.qr_session_id = qs.id " +
+                     "LEFT JOIN course_schedules cs ON qs.schedule_id = cs.id " +
                      "WHERE a.course_id = ? " +
                      "ORDER BY a.marked_at DESC";
         try (Connection conn = DBConnection.getInstance().getConnection();
@@ -89,11 +92,14 @@ public class AttendanceDao implements Dao<Attendance> {
 
     public List<Attendance> findByStudent(int studentId) {
         List<Attendance> list = new ArrayList<>();
-        String sql = "SELECT a.*, u.name AS student_name, s.roll_number, c.course_code, c.course_name " +
+        String sql = "SELECT a.*, u.name AS student_name, s.roll_number, c.course_code, c.course_name, " +
+                     "cs.day_of_week AS schedule_day, cs.start_time AS schedule_start, cs.end_time AS schedule_end, cs.room AS schedule_room " +
                      "FROM attendance a " +
                      "JOIN students s ON a.student_id = s.student_id " +
                      "JOIN users u ON s.user_id = u.id " +
                      "JOIN courses c ON a.course_id = c.id " +
+                     "LEFT JOIN qr_sessions qs ON a.qr_session_id = qs.id " +
+                     "LEFT JOIN course_schedules cs ON qs.schedule_id = cs.id " +
                      "WHERE a.student_id = ? " +
                      "ORDER BY a.marked_at DESC";
         try (Connection conn = DBConnection.getInstance().getConnection();
@@ -112,11 +118,14 @@ public class AttendanceDao implements Dao<Attendance> {
 
     public List<Attendance> findBySession(int qrSessionId) {
         List<Attendance> list = new ArrayList<>();
-        String sql = "SELECT a.*, u.name AS student_name, s.roll_number, c.course_code, c.course_name " +
+        String sql = "SELECT a.*, u.name AS student_name, s.roll_number, c.course_code, c.course_name, " +
+                     "cs.day_of_week AS schedule_day, cs.start_time AS schedule_start, cs.end_time AS schedule_end, cs.room AS schedule_room " +
                      "FROM attendance a " +
                      "JOIN students s ON a.student_id = s.student_id " +
                      "JOIN users u ON s.user_id = u.id " +
                      "JOIN courses c ON a.course_id = c.id " +
+                     "LEFT JOIN qr_sessions qs ON a.qr_session_id = qs.id " +
+                     "LEFT JOIN course_schedules cs ON qs.schedule_id = cs.id " +
                      "WHERE a.qr_session_id = ? " +
                      "ORDER BY a.marked_at DESC";
         try (Connection conn = DBConnection.getInstance().getConnection();
@@ -135,11 +144,14 @@ public class AttendanceDao implements Dao<Attendance> {
 
     public List<Attendance> findByCourseAndSession(int courseId, int qrSessionId) {
         List<Attendance> list = new ArrayList<>();
-        String sql = "SELECT a.*, u.name AS student_name, s.roll_number, c.course_code, c.course_name " +
+        String sql = "SELECT a.*, u.name AS student_name, s.roll_number, c.course_code, c.course_name, " +
+                     "cs.day_of_week AS schedule_day, cs.start_time AS schedule_start, cs.end_time AS schedule_end, cs.room AS schedule_room " +
                      "FROM attendance a " +
                      "JOIN students s ON a.student_id = s.student_id " +
                      "JOIN users u ON s.user_id = u.id " +
                      "JOIN courses c ON a.course_id = c.id " +
+                     "LEFT JOIN qr_sessions qs ON a.qr_session_id = qs.id " +
+                     "LEFT JOIN course_schedules cs ON qs.schedule_id = cs.id " +
                      "WHERE a.course_id = ? AND a.qr_session_id = ? " +
                      "ORDER BY a.marked_at DESC";
         try (Connection conn = DBConnection.getInstance().getConnection();
@@ -538,6 +550,17 @@ public class AttendanceDao implements Dao<Attendance> {
             a.setMarkedAt(ts.toLocalDateTime());
         }
         a.setStatus(rs.getString("status"));
+        try {
+            String sDay = rs.getString("schedule_day");
+            java.sql.Time sStart = rs.getTime("schedule_start");
+            java.sql.Time sEnd = rs.getTime("schedule_end");
+            String sRoom = rs.getString("schedule_room");
+            if (sDay != null && sStart != null && sEnd != null) {
+                String fmt = sDay + " " + sStart.toString().substring(0, 5) + "-" + sEnd.toString().substring(0, 5);
+                if (sRoom != null && !sRoom.trim().isEmpty()) fmt += " (" + sRoom.trim() + ")";
+                a.setScheduleFormatted(fmt);
+            }
+        } catch (SQLException ignored) {}
         return a;
     }
 }

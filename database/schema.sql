@@ -96,12 +96,15 @@ CREATE TABLE IF NOT EXISTS qr_sessions (
     session_token VARCHAR(255) NOT NULL UNIQUE,
     course_id   INT NOT NULL,
     teacher_id  INT NOT NULL,
+    schedule_id INT NULL DEFAULT NULL,
     expires_at  TIMESTAMP NOT NULL,
     closed_at   TIMESTAMP NULL DEFAULT NULL,
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_active   BOOLEAN DEFAULT TRUE,
-    FOREIGN KEY (course_id)  REFERENCES courses(id) ON DELETE CASCADE,
-    FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id) ON DELETE CASCADE
+    INDEX idx_qr_schedule (schedule_id),
+    FOREIGN KEY (course_id)    REFERENCES courses(id) ON DELETE CASCADE,
+    FOREIGN KEY (teacher_id)   REFERENCES teachers(teacher_id) ON DELETE CASCADE,
+    FOREIGN KEY (schedule_id)  REFERENCES course_schedules(id) ON DELETE SET NULL
 );
 
 -- -------------------------------------------------------

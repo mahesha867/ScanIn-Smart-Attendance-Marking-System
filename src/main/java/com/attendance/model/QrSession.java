@@ -15,6 +15,11 @@ public class QrSession {
     private String courseName;
     private int teacherId;
     private String teacherName;
+    private Integer scheduleId;
+    private String scheduleDay;
+    private java.sql.Time scheduleStartTime;
+    private java.sql.Time scheduleEndTime;
+    private String scheduleRoom;
     private LocalDateTime expiresAt;
     private LocalDateTime closedAt;
     private LocalDateTime createdAt;
@@ -39,6 +44,40 @@ public class QrSession {
 
     public LocalDateTime getClosedAt() { return closedAt; }
     public void setClosedAt(LocalDateTime closedAt) { this.closedAt = closedAt; }
+
+    public Integer getScheduleId() { return scheduleId; }
+    public void setScheduleId(Integer scheduleId) { this.scheduleId = scheduleId; }
+
+    public String getScheduleDay() { return scheduleDay; }
+    public void setScheduleDay(String scheduleDay) { this.scheduleDay = scheduleDay; }
+
+    public java.sql.Time getScheduleStartTime() { return scheduleStartTime; }
+    public void setScheduleStartTime(java.sql.Time scheduleStartTime) { this.scheduleStartTime = scheduleStartTime; }
+
+    public java.sql.Time getScheduleEndTime() { return scheduleEndTime; }
+    public void setScheduleEndTime(java.sql.Time scheduleEndTime) { this.scheduleEndTime = scheduleEndTime; }
+
+    public String getScheduleRoom() { return scheduleRoom; }
+    public void setScheduleRoom(String scheduleRoom) { this.scheduleRoom = scheduleRoom; }
+
+    public boolean isScheduled() {
+        return scheduleId != null && scheduleId > 0;
+    }
+
+    public String getScheduleFormatted() {
+        if (!isScheduled()) return null;
+        StringBuilder sb = new StringBuilder();
+        if (scheduleDay != null) sb.append(scheduleDay).append(" ");
+        if (scheduleStartTime != null && scheduleEndTime != null) {
+            sb.append(scheduleStartTime.toString().substring(0, 5))
+              .append(" - ")
+              .append(scheduleEndTime.toString().substring(0, 5));
+        }
+        if (scheduleRoom != null && !scheduleRoom.trim().isEmpty()) {
+            sb.append(" (").append(scheduleRoom.trim()).append(")");
+        }
+        return sb.toString();
+    }
 
     // ── Getters and Setters ───────────────────────────────────────
     public int getId()                                { return id; }

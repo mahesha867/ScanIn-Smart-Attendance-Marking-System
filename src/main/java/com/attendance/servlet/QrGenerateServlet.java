@@ -2,10 +2,12 @@ package com.attendance.servlet;
 
 import com.attendance.dao.AttendanceDao;
 import com.attendance.dao.CourseDao;
+import com.attendance.dao.CourseScheduleDao;
 import com.attendance.dao.QrSessionDao;
 import com.attendance.dao.TeacherDao;
 import com.attendance.model.Attendance;
 import com.attendance.model.Course;
+import com.attendance.model.CourseSchedule;
 import com.attendance.model.QrSession;
 import com.attendance.model.Teacher;
 import com.attendance.model.User;
@@ -34,6 +36,7 @@ public class QrGenerateServlet extends HttpServlet {
     private CourseDao courseDao;
     private TeacherDao teacherDao;
     private AttendanceDao attendanceDao;
+    private CourseScheduleDao scheduleDao;
 
     @Override
     public void init() throws ServletException {
@@ -41,6 +44,7 @@ public class QrGenerateServlet extends HttpServlet {
         this.courseDao = new CourseDao();
         this.teacherDao = new TeacherDao();
         this.attendanceDao = new AttendanceDao();
+        this.scheduleDao = new CourseScheduleDao();
     }
 
     @Override
@@ -222,17 +226,49 @@ public class QrGenerateServlet extends HttpServlet {
         // Clean up any historical class meetings whose scheduled duration (60+ min) genuinely expired hours ago
         qrSessionDao.autoCloseExpiredSessions();
 
+        String scheduleIdParam = request.getParameter("scheduleId");
+        Integer scheduleId = null;
+        CourseSchedule selectedSchedule = null;
+        if (scheduleIdParam != null && !scheduleIdParam.trim().isEmpty()) {
+            try {
+                int sId = Integer.parseInt(scheduleIdParam.trim());
+                CourseSchedule cs = scheduleDao.findById(sId);
+                if (cs != null && cs.getCourseId() == courseId) {
+                    scheduleId = sId;
+                    selectedSchedule = cs;
+                }
+            } catch (NumberFormatException ignored) {}
+        }
+
         // Retrieve existing active meeting session or initialize a single persistent class meeting
         Optional<QrSession> activeOpt = qrSessionDao.findActiveByCourseId(courseId);
         QrSession session;
         if (activeOpt.isPresent()) {
             session = activeOpt.get();
+            // If active session was ad-hoc and is now explicitly launched for a scheduled timeslot, bind it
+            if (scheduleId != null && (session.getScheduleId() == null || session.getScheduleId() == 0)) {
+                session.setScheduleId(scheduleId);
+                qrSessionDao.updateScheduleId(session.getId(), scheduleId);
+            }
+            if (selectedSchedule == null && session.getScheduleId() != null && session.getScheduleId() > 0) {
+                selectedSchedule = scheduleDao.findById(session.getScheduleId());
+            }
         } else {
             session = new QrSession();
             session.setCourseId(courseId);
             session.setTeacherId(teacher != null ? teacher.getTeacherId() : course.getTeacherId());
-            // Standard 60-minute scheduled class meeting window in UTC
-            session.setExpiresAt(LocalDateTime.now().plusMinutes(60));
+            session.setScheduleId(scheduleId);
+            
+            LocalDateTime expires = LocalDateTime.now().plusMinutes(60);
+            if (selectedSchedule != null && selectedSchedule.getEndTime() != null) {
+                java.time.LocalTime endTime = selectedSchedule.getEndTime().toLocalTime();
+                java.time.LocalDate today = java.time.LocalDate.now();
+                LocalDateTime schedEnd = today.atTime(endTime);
+                if (schedEnd.isAfter(LocalDateTime.now().plusMinutes(15))) {
+                    expires = schedEnd;
+                }
+            }
+            session.setExpiresAt(expires);
             session.setActive(true);
             String initialPlaceholder = "init_" + System.currentTimeMillis() + "_" + java.util.UUID.randomUUID().toString().replace("-", "");
             session.setSessionToken(initialPlaceholder);
@@ -272,6 +308,7 @@ public class QrGenerateServlet extends HttpServlet {
         List<Attendance> markedList = attendanceDao.findBySession(session.getId());
 
         request.setAttribute("course", course);
+        request.setAttribute("schedule", selectedSchedule);
         request.setAttribute("sessionToken", token);
         request.setAttribute("numericCode", numericCode);
         request.setAttribute("scanUrl", fullScanUrl);

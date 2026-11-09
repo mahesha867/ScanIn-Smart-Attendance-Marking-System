@@ -19,11 +19,13 @@ public class QrSessionDao implements Dao<QrSession> {
 
     @Override
     public Optional<QrSession> findById(int id) {
-        String sql = "SELECT qs.*, c.course_code, c.course_name, u.name AS teacher_name " +
+        String sql = "SELECT qs.*, c.course_code, c.course_name, u.name AS teacher_name, " +
+                     "cs.day_of_week AS schedule_day, cs.start_time AS schedule_start, cs.end_time AS schedule_end, cs.room AS schedule_room " +
                      "FROM qr_sessions qs " +
                      "JOIN courses c ON qs.course_id = c.id " +
                      "JOIN teachers t ON qs.teacher_id = t.teacher_id " +
                      "JOIN users u ON t.user_id = u.id " +
+                     "LEFT JOIN course_schedules cs ON qs.schedule_id = cs.id " +
                      "WHERE qs.id = ?";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -40,11 +42,13 @@ public class QrSessionDao implements Dao<QrSession> {
     }
 
     public Optional<QrSession> findByToken(String token) {
-        String sql = "SELECT qs.*, c.course_code, c.course_name, u.name AS teacher_name " +
+        String sql = "SELECT qs.*, c.course_code, c.course_name, u.name AS teacher_name, " +
+                     "cs.day_of_week AS schedule_day, cs.start_time AS schedule_start, cs.end_time AS schedule_end, cs.room AS schedule_room " +
                      "FROM qr_sessions qs " +
                      "JOIN courses c ON qs.course_id = c.id " +
                      "JOIN teachers t ON qs.teacher_id = t.teacher_id " +
                      "JOIN users u ON t.user_id = u.id " +
+                     "LEFT JOIN course_schedules cs ON qs.schedule_id = cs.id " +
                      "WHERE qs.session_token = ?";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -61,11 +65,13 @@ public class QrSessionDao implements Dao<QrSession> {
     }
 
     public Optional<QrSession> findActiveByCourseId(int courseId) {
-        String sql = "SELECT qs.*, c.course_code, c.course_name, u.name AS teacher_name " +
+        String sql = "SELECT qs.*, c.course_code, c.course_name, u.name AS teacher_name, " +
+                     "cs.day_of_week AS schedule_day, cs.start_time AS schedule_start, cs.end_time AS schedule_end, cs.room AS schedule_room " +
                      "FROM qr_sessions qs " +
                      "LEFT JOIN courses c ON qs.course_id = c.id " +
                      "LEFT JOIN teachers t ON qs.teacher_id = t.teacher_id " +
                      "LEFT JOIN users u ON t.user_id = u.id " +
+                     "LEFT JOIN course_schedules cs ON qs.schedule_id = cs.id " +
                      "WHERE qs.course_id = ? AND qs.is_active = TRUE AND qs.closed_at IS NULL " +
                      "ORDER BY qs.id DESC LIMIT 1";
         try (Connection conn = DBConnection.getInstance().getConnection();
@@ -247,11 +253,13 @@ public class QrSessionDao implements Dao<QrSession> {
      */
     public List<QrSession> findByCourseId(int courseId) {
         List<QrSession> sessions = new ArrayList<>();
-        String sql = "SELECT qs.*, c.course_code, c.course_name, u.name AS teacher_name " +
+        String sql = "SELECT qs.*, c.course_code, c.course_name, u.name AS teacher_name, " +
+                     "cs.day_of_week AS schedule_day, cs.start_time AS schedule_start, cs.end_time AS schedule_end, cs.room AS schedule_room " +
                      "FROM qr_sessions qs " +
                      "JOIN courses c ON qs.course_id = c.id " +
                      "JOIN teachers t ON qs.teacher_id = t.teacher_id " +
                      "JOIN users u ON t.user_id = u.id " +
+                     "LEFT JOIN course_schedules cs ON qs.schedule_id = cs.id " +
                      "WHERE qs.course_id = ? AND qs.session_token NOT LIKE 'MERGED_INTO_%' " +
                      "ORDER BY qs.id DESC";
         try (Connection conn = DBConnection.getInstance().getConnection();
@@ -273,22 +281,65 @@ public class QrSessionDao implements Dao<QrSession> {
         if (session.getSessionToken() == null || session.getSessionToken().trim().isEmpty() || "pending_init".equals(session.getSessionToken())) {
             session.setSessionToken("init_" + System.currentTimeMillis() + "_" + java.util.UUID.randomUUID().toString().replace("-", ""));
         }
-        String sql = "INSERT INTO qr_sessions (session_token, course_id, teacher_id, expires_at, is_active) VALUES (?, ?, ?, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE), ?)";
-        try (Connection conn = DBConnection.getInstance().getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setString(1, session.getSessionToken());
-            ps.setInt(2, session.getCourseId());
-            ps.setInt(3, session.getTeacherId());
-            ps.setBoolean(4, session.isActive());
-            int affected = ps.executeUpdate();
-            if (affected > 0) {
-                try (ResultSet keys = ps.getGeneratedKeys()) {
-                    if (keys.next()) {
-                        session.setId(keys.getInt(1));
+        boolean hasSchedule = session.getScheduleId() != null && session.getScheduleId() > 0;
+        String sqlWithSched = "INSERT INTO qr_sessions (session_token, course_id, teacher_id, schedule_id, expires_at, is_active) VALUES (?, ?, ?, ?, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE), ?)";
+        String sqlBasic = "INSERT INTO qr_sessions (session_token, course_id, teacher_id, expires_at, is_active) VALUES (?, ?, ?, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE), ?)";
+
+        try (Connection conn = DBConnection.getInstance().getConnection()) {
+            String sql = hasSchedule ? sqlWithSched : sqlBasic;
+            try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                ps.setString(1, session.getSessionToken());
+                ps.setInt(2, session.getCourseId());
+                ps.setInt(3, session.getTeacherId());
+                if (hasSchedule) {
+                    ps.setInt(4, session.getScheduleId());
+                    ps.setBoolean(5, session.isActive());
+                } else {
+                    ps.setBoolean(4, session.isActive());
+                }
+                int affected = ps.executeUpdate();
+                if (affected > 0) {
+                    try (ResultSet keys = ps.getGeneratedKeys()) {
+                        if (keys.next()) {
+                            session.setId(keys.getInt(1));
+                        }
+                    }
+                    return true;
+                }
+            } catch (SQLException ex) {
+                // If schedule_id column is not in DB yet, fallback to sqlBasic
+                if (hasSchedule) {
+                    try (PreparedStatement psBasic = conn.prepareStatement(sqlBasic, Statement.RETURN_GENERATED_KEYS)) {
+                        psBasic.setString(1, session.getSessionToken());
+                        psBasic.setInt(2, session.getCourseId());
+                        psBasic.setInt(3, session.getTeacherId());
+                        psBasic.setBoolean(4, session.isActive());
+                        int affected = psBasic.executeUpdate();
+                        if (affected > 0) {
+                            try (ResultSet keys = psBasic.getGeneratedKeys()) {
+                                if (keys.next()) {
+                                    session.setId(keys.getInt(1));
+                                }
+                            }
+                            return true;
+                        }
                     }
                 }
-                return true;
+                throw ex;
             }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public boolean updateScheduleId(int sessionId, int scheduleId) {
+        String sql = "UPDATE qr_sessions SET schedule_id = ? WHERE id = ?";
+        try (Connection conn = DBConnection.getInstance().getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, scheduleId);
+            ps.setInt(2, sessionId);
+            return ps.executeUpdate() > 0;
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -344,6 +395,18 @@ public class QrSessionDao implements Dao<QrSession> {
             if (cls != null) {
                 s.setClosedAt(cls.toLocalDateTime());
             }
+        } catch (SQLException ignored) {}
+        try {
+            int schedId = rs.getInt("schedule_id");
+            if (!rs.wasNull() && schedId > 0) {
+                s.setScheduleId(schedId);
+            }
+        } catch (SQLException ignored) {}
+        try {
+            s.setScheduleDay(rs.getString("schedule_day"));
+            s.setScheduleStartTime(rs.getTime("schedule_start"));
+            s.setScheduleEndTime(rs.getTime("schedule_end"));
+            s.setScheduleRoom(rs.getString("schedule_room"));
         } catch (SQLException ignored) {}
         s.setActive(rs.getBoolean("is_active"));
         return s;

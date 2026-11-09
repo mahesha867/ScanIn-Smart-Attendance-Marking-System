@@ -49,6 +49,19 @@ public class AppContextListener implements ServletContextListener {
                 }
             }
 
+            // 1c. Ensure schedule_id column exists in qr_sessions
+            try {
+                stmt.executeUpdate("ALTER TABLE qr_sessions ADD COLUMN IF NOT EXISTS schedule_id INT NULL DEFAULT NULL");
+                System.out.println("[AppContextListener] Ensured qr_sessions.schedule_id column exists.");
+            } catch (Exception e1) {
+                try {
+                    stmt.executeUpdate("ALTER TABLE qr_sessions ADD COLUMN schedule_id INT NULL DEFAULT NULL");
+                    System.out.println("[AppContextListener] Added qr_sessions.schedule_id column.");
+                } catch (Exception e2) {
+                    System.out.println("[AppContextListener] qr_sessions.schedule_id column notice: " + e2.getMessage());
+                }
+            }
+
             // 2. Ensure scan_attempts table exists
             try {
                 stmt.executeUpdate("CREATE TABLE IF NOT EXISTS scan_attempts (" +

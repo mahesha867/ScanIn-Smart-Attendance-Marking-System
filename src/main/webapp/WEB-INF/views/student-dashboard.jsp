@@ -377,7 +377,15 @@
                                         <%= att.getMarkedAt() != null ? att.getMarkedAt().format(dtf) : "&mdash;" %>
                                     </td>
                                     <td><strong><%= att.getCourseCode() %></strong></td>
-                                    <td><%= att.getCourseName() %></td>
+                                    <td>
+                                        <div><%= att.getCourseName() %></div>
+                                        <% if (att.getScheduleFormatted() != null) { %>
+                                            <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.15rem; display: flex; align-items: center; gap: 0.25rem;">
+                                                <svg class="ui-icon ui-icon-xs" style="color: #582c83;"><use href="#icon-calendar"></use></svg>
+                                                <span>Scheduled: <%= att.getScheduleFormatted() %></span>
+                                            </div>
+                                        <% } %>
+                                    </td>
                                     <td>
                                         <% if ("PRESENT".equalsIgnoreCase(att.getStatus())) { %>
                                             <span class="badge badge-present">

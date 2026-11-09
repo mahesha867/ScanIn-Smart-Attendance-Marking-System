@@ -206,15 +206,57 @@
                                     </div>
                                 <% } else { %>
                                     <ul style="list-style: none; padding: 0; margin: 0; font-size: 0.84rem;">
-                                        <% for (CourseSchedule cs : schedules) { %>
-                                            <li style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
-                                                <span><strong><%= cs.getDayOfWeek() %>:</strong> <%= cs.getStartTime() %> - <%= cs.getEndTime() %> (<%= cs.getRoom() %>)</span>
-                                                <form method="POST" action="${pageContext.request.contextPath}/teacher/schedules/delete" style="display: inline;" onsubmit="return confirm('Remove this timeslot?');">
-                                                    <input type="hidden" name="scheduleId" value="<%= cs.getId() %>">
-                                                    <button type="submit" title="Remove timeslot" style="background: none; border: none; color: #94a3b8; cursor: pointer; padding: 2px;">
-                                                        <svg class="ui-icon ui-icon-xs" style="color: #64748b;"><use href="#icon-close"></use></svg>
-                                                    </button>
-                                                </form>
+                                        <% for (CourseSchedule cs : schedules) { 
+                                            boolean isActiveNow = false;
+                                            if (cs.getDayOfWeek() != null && cs.getStartTime() != null && cs.getEndTime() != null) {
+                                                java.time.ZonedDateTime istNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+                                                java.time.ZonedDateTime utcNow = java.time.ZonedDateTime.now(java.time.ZoneId.of("UTC"));
+                                                
+                                                java.time.LocalTime start = cs.getStartTime().toLocalTime();
+                                                java.time.LocalTime end = cs.getEndTime().toLocalTime();
+                                                java.time.LocalTime earlyStart = start.minusMinutes(15);
+                                                
+                                                boolean istDay = istNow.getDayOfWeek().name().equalsIgnoreCase(cs.getDayOfWeek());
+                                                boolean istTime = !istNow.toLocalTime().isBefore(earlyStart) && !istNow.toLocalTime().isAfter(end);
+                                                
+                                                boolean utcDay = utcNow.getDayOfWeek().name().equalsIgnoreCase(cs.getDayOfWeek());
+                                                boolean utcTime = !utcNow.toLocalTime().isBefore(earlyStart) && !utcNow.toLocalTime().isAfter(end);
+                                                
+                                                isActiveNow = (istDay && istTime) || (utcDay && utcTime);
+                                            }
+                                        %>
+                                            <li style="display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0.6rem; margin-bottom: 0.4rem; background: #ffffff; border: 1.5px solid <%= isActiveNow ? "#86efac" : "var(--border-subtle)" %>; border-radius: 8px; box-shadow: <%= isActiveNow ? "0 2px 6px rgba(22, 163, 74, 0.12)" : "none" %>;">
+                                                <div style="display: flex; flex-direction: column; gap: 0.1rem; min-width: 0;">
+                                                    <div style="font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
+                                                        <span style="font-size: 0.82rem;"><%= cs.getDayOfWeek() %>:</span>
+                                                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #582c83;">
+                                                            <%= cs.getStartTime().toString().substring(0, 5) %> - <%= cs.getEndTime().toString().substring(0, 5) %>
+                                                        </span>
+                                                        <% if (isActiveNow) { %>
+                                                            <span class="badge" style="background: #dcfce7; color: #15803d; font-size: 0.68rem; padding: 0.1rem 0.35rem; border: 1px solid #86efac; font-weight: 700;">
+                                                                ● Active Now
+                                                            </span>
+                                                        <% } %>
+                                                    </div>
+                                                    <div style="font-size: 0.75rem; color: #64748b;">
+                                                        Room: <strong><%= cs.getRoom() != null ? cs.getRoom().trim() : "TBD" %></strong>
+                                                    </div>
+                                                </div>
+                                                <div style="display: flex; align-items: center; gap: 0.35rem; margin-left: 0.4rem;">
+                                                    <a href="${pageContext.request.contextPath}/qr/generate?courseId=<%= c.getId() %>&scheduleId=<%= cs.getId() %>" 
+                                                       class="btn btn-sm" 
+                                                       style="padding: 0.28rem 0.6rem; font-size: 0.74rem; font-weight: 700; white-space: nowrap; <%= isActiveNow ? "background: #15803d; color: #ffffff; border: 1px solid #15803d;" : "background: #faf5ff; color: #582c83; border: 1px solid #d8b4fe;" %>"
+                                                       title="Start live attendance QR for this scheduled timeslot">
+                                                        <svg class="ui-icon ui-icon-xs" style="<%= isActiveNow ? "color: #ffffff;" : "color: #582c83;" %>"><use href="#icon-qr"></use></svg>
+                                                        <span><%= isActiveNow ? "Start Now" : "Start QR" %></span>
+                                                    </a>
+                                                    <form method="POST" action="${pageContext.request.contextPath}/teacher/schedules/delete" style="display: inline; margin: 0;" onsubmit="return confirm('Remove this timeslot?');">
+                                                        <input type="hidden" name="scheduleId" value="<%= cs.getId() %>">
+                                                        <button type="submit" title="Remove timeslot" style="background: none; border: none; color: #94a3b8; cursor: pointer; padding: 2px;">
+                                                            <svg class="ui-icon ui-icon-xs" style="color: #94a3b8;"><use href="#icon-close"></use></svg>
+                                                        </button>
+                                                    </form>
+                                                </div>
                                             </li>
                                         <% } %>
                                     </ul>

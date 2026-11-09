@@ -238,7 +238,7 @@
                         <% if (courseSessions != null && !courseSessions.isEmpty()) {
                             for (QrSession qs : courseSessions) { %>
                                 <option value="<%= qs.getId() %>" <%= (selectedSessionId != null && selectedSessionId == qs.getId()) ? "selected" : "" %>>
-                                    #SES-<%= qs.getId() %> &bull; <%= qs.getCreatedAt() != null ? qs.getCreatedAt().format(dtf) : "Session " + qs.getId() %><%= qs.isActive() ? " (Active)" : "" %>
+                                    #SES-<%= qs.getId() %> &bull; <%= qs.getScheduleFormatted() != null ? ("[" + qs.getScheduleFormatted() + "] &bull; ") : "" %><%= qs.getCreatedAt() != null ? qs.getCreatedAt().format(dtf) : "Session " + qs.getId() %><%= qs.isActive() ? " (Active)" : "" %>
                                 </option>
                         <%  }
                         } %>
@@ -260,6 +260,9 @@
                     </span>
                     <span style="color: #4c1d95; font-size: 0.9rem; font-weight: 600;">
                         Filtered view: Showing attendance records exclusively for Session #SES-<%= selectedSessionId %>
+                        <% if (selectedSession != null && selectedSession.getScheduleFormatted() != null) { %>
+                            &bull; <strong>Scheduled: <%= selectedSession.getScheduleFormatted() %></strong>
+                        <% } %>
                         <% if (selectedSession != null && selectedSession.getCreatedAt() != null) { %>
                             &bull; Held on <%= selectedSession.getCreatedAt().format(dtf) %>
                             <% if (selectedSession.isActive()) { %>
@@ -354,6 +357,11 @@
                                                 #SES-<%= a.getQrSessionId() %>
                                             </span>
                                         </a>
+                                        <% if (a.getScheduleFormatted() != null) { %>
+                                            <div style="font-size: 0.72rem; color: #64748b; margin-top: 0.2rem;">
+                                                <%= a.getScheduleFormatted() %>
+                                            </div>
+                                        <% } %>
                                     </td>
                                     <td style="padding: 0.85rem 1.25rem;">
                                         <span class="badge <%= badgeClass %>" style="padding: 0.28rem 0.65rem; border-radius: 6px; font-size: 0.8rem; font-weight: 700;">

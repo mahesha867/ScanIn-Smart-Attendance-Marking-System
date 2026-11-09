@@ -18,6 +18,7 @@ public class Attendance {
     private int qrSessionId;
     private LocalDateTime markedAt;
     private String status; // PRESENT, ABSENT, LATE
+    private String scheduleFormatted;
 
     public Attendance() {}
 
@@ -61,6 +62,9 @@ public class Attendance {
 
     public String getStatus()                         { return status; }
     public void setStatus(String status)              { this.status = status; }
+
+    public String getScheduleFormatted()              { return scheduleFormatted; }
+    public void setScheduleFormatted(String scheduleFormatted) { this.scheduleFormatted = scheduleFormatted; }
 
     @Override
     public String toString() {
