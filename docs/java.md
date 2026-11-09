@@ -548,7 +548,74 @@ Returning `null` from a method and forgetting to check is the #1 source of `Null
 
 ---
 
-## 11. Summary Map: Concept → File
+## 11. Modern Date & Time API (`java.time.*`) & Centralized Timezone Strategy
+
+**The Problem:** Traditional Java date handling (`java.util.Date`, `java.text.SimpleDateFormat`) is mutable, error-prone, and not thread-safe. Furthermore, cloud databases (like TiDB Cloud / AWS) operate in UTC (`+00:00`), while students and faculty in India operate in Indian Standard Time (IST — `Asia/Kolkata`, UTC+05:30). If raw UTC timestamps are displayed, records appear 5 hours and 30 minutes behind local wall-clock time (e.g. 09:41 AM instead of 03:11 PM).
+
+**The Solution:** ScanIn enforces a strict architectural boundary via `DateTimeUtil.java`:
+1. **Database & Storage Layer:** Canonical UTC (`+00:00`) for consistency and multi-system portability.
+2. **Presentation Layer:** All views format through `DateTimeUtil.formatToIst()`, converting UTC into `Asia/Kolkata` time using immutable `ZonedDateTime`.
+
+```java
+// DateTimeUtil.java
+public final class DateTimeUtil {
+    public static final ZoneId UTC_ZONE = ZoneOffset.UTC;
+    public static final ZoneId IST_ZONE = ZoneId.of("Asia/Kolkata");
+    public static final DateTimeFormatter IST_DISPLAY_FORMATTER =
+            DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a", Locale.ENGLISH);
+
+    // Converts UTC LocalDateTime to Asia/Kolkata ZonedDateTime
+    public static ZonedDateTime toIst(LocalDateTime utcDateTime) {
+        if (utcDateTime == null) return null;
+        return utcDateTime.atZone(UTC_ZONE).withZoneSameInstant(IST_ZONE);
+    }
+
+    // Formats into clean academic UI string: "09 Nov 2026, 03:11 PM"
+    public static String formatToIst(LocalDateTime utcDateTime) {
+        if (utcDateTime == null) return "N/A";
+        return toIst(utcDateTime).format(IST_DISPLAY_FORMATTER);
+    }
+}
+```
+
+**Why this is better than manual addition (`plusHours(5).plusMinutes(30)`):**
+- `ZonedDateTime.withZoneSameInstant()` handles daylight changes, epoch instant integrity, and calendar date boundary crossovers automatically (e.g., when 23:00 UTC crosses over to 04:30 next morning).
+- Immutable and 100% thread-safe — multiple servlets and JSPs can format dates concurrently without synchronization locks.
+
+**File:** [`src/main/java/com/attendance/util/DateTimeUtil.java`](../src/main/java/com/attendance/util/DateTimeUtil.java)
+
+---
+
+## 12. Course Scheduling & Lifecycle State Pattern
+
+**What it is:** Managing planned academic timetables requires tracking lecture states from **Planned/Scheduled** $\rightarrow$ **Active Live QR** $\rightarrow$ **Conducted / Retired**.
+
+```java
+// CourseSchedule.java
+public class CourseSchedule {
+    private int id;
+    private int courseId;
+    private String dayOfWeek;     // "Monday"
+    private Time startTime;       // 15:00:00
+    private Time endTime;         // 16:00:00
+    private String room;          // "ANEW202"
+    private boolean conducted;    // true once attendance is closed
+}
+```
+
+**How it works in practice:**
+1. **Creation:** Faculty creates timeslots under "Planned Lecture Schedule".
+2. **Execution:** Faculty clicks **"Start Now"**; the system creates a `QrSession` with `schedule_id = cs.id`.
+3. **Closure & Retirement:** When faculty clicks **"End Session & Mark Absentees"**, `QrSessionDao.closeSession()` marks absentees AND calls `CourseScheduleDao.markAsConducted(scheduleId)`.
+4. **Historical Report Preservation:** The schedule row is never hard-deleted; it is excluded from upcoming planned lists on the dashboard, but `LEFT JOIN course_schedules cs ON qs.schedule_id = cs.id` in `AttendanceDao` retains the timeslot metadata in reports indefinitely.
+
+**Files:**
+- [`src/main/java/com/attendance/model/CourseSchedule.java`](../src/main/java/com/attendance/model/CourseSchedule.java)
+- [`src/main/java/com/attendance/dao/CourseScheduleDao.java`](../src/main/java/com/attendance/dao/CourseScheduleDao.java)
+
+---
+
+## 13. Summary Map: Concept → File
 
 | Concept | Primary File(s) |
 |---|---|
@@ -558,13 +625,14 @@ Returning `null` from a method and forgetting to check is the #1 source of `Null
 | Encapsulation | All model classes |
 | Interface | [`Dao.java`](../src/main/java/com/attendance/dao/Dao.java), [`Attendable.java`](../src/main/java/com/attendance/model/Attendable.java) |
 | Singleton pattern | [`DBConnection.java`](../src/main/java/com/attendance/util/DBConnection.java) |
-| DAO pattern | [`AttendanceDao.java`](../src/main/java/com/attendance/dao/AttendanceDao.java), [`QrSessionDao.java`](../src/main/java/com/attendance/dao/QrSessionDao.java) |
-| Servlet lifecycle | [`QrGenerateServlet.java`](../src/main/java/com/attendance/servlet/QrGenerateServlet.java), [`QrScanServlet.java`](../src/main/java/com/attendance/servlet/QrScanServlet.java) |
+| DAO pattern | [`AttendanceDao.java`](../src/main/java/com/attendance/dao/AttendanceDao.java), [`QrSessionDao.java`](../src/main/java/com/attendance/dao/QrSessionDao.java), [`CourseScheduleDao.java`](../src/main/java/com/attendance/dao/CourseScheduleDao.java) |
+| Servlet lifecycle | [`QrGenerateServlet.java`](../src/main/java/com/attendance/servlet/QrGenerateServlet.java), [`QrScanServlet.java`](../src/main/java/com/attendance/servlet/QrScanServlet.java), [`ReportServlet.java`](../src/main/java/com/attendance/servlet/ReportServlet.java) |
 | Filter / RBAC | [`SecurityFilter.java`](../src/main/java/com/attendance/filter/SecurityFilter.java) |
 | Session management | [`SessionUtil.java`](../src/main/java/com/attendance/util/SessionUtil.java) |
 | JDBC & PreparedStatement | All DAO classes |
 | HMAC-SHA256 cryptography | [`QrCodeUtil.java`](../src/main/java/com/attendance/util/QrCodeUtil.java) |
 | BCrypt hashing | [`PasswordUtil.java`](../src/main/java/com/attendance/util/PasswordUtil.java) |
+| Modern Date/Time & Timezones | [`DateTimeUtil.java`](../src/main/java/com/attendance/util/DateTimeUtil.java) |
 | Generics | [`Dao.java`](../src/main/java/com/attendance/dao/Dao.java) |
 | App lifecycle listener | [`AppContextListener.java`](../src/main/java/com/attendance/listener/AppContextListener.java) |
 | Optional / null safety | All DAO findById methods |

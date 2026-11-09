@@ -19,6 +19,7 @@
 | **Hosting Platform** | Render Web Service (Dockerized Apache Tomcat 10.1 / OpenJDK 21) |
 | **Database Engine** | TiDB Cloud Serverless (MySQL 8.0 Protocol Compatible, TLS/SSL Encrypted) |
 | **QR Rotation** | **7 seconds** (10-second validity window with 3-second transmission leeway) |
+| **Timezone Strategy** | Canonical UTC Storage (`+00:00`) with Indian Standard Time (IST, UTC+05:30) presentation via `DateTimeUtil` |
 | **Self-Healing Schema** | Auto-migrations on container startup via [`AppContextListener`](src/main/java/com/attendance/listener/AppContextListener.java) |
 | **Test Coverage** | 85 / 85 automated tests — 100% PASS |
 
@@ -37,6 +38,9 @@ The system prevents proxy attendance and screenshot reuse through:
 5. **ACID Concurrency Safety** — `UNIQUE KEY (student_id, qr_session_id)` prevents race-condition double-marking; rollbacks happen automatically on duplicate key error (code 1062).
 6. **Append-Only Audit Trail** — Manual status overrides (OD, EXCUSED, LATE, PRESENT, ABSENT) are permanently logged with actor, timestamp, and mandatory justification text.
 7. **Centralized Server-Side RBAC** — `SecurityFilter` enforces role boundaries; students receive HTTP 403 Forbidden on any faculty resource.
+8. **Planned Lecture Schedules & Live QR Binding** — Faculty can define weekly course timeslots and launch scheduled QR attendance with one click ("Start Now"); completed sessions automatically retire from active planned lists while preserving historical report labels.
+9. **Session-Wise Attendance Analytics** — Faculty reports allow consolidated course-level review as well as granular, single-session inspection (`#SES-XXXXX`) with responsive search and timeslot badge metadata.
+10. **IST Presentation Standardization** — Centralized `DateTimeUtil` converts canonical server UTC timestamps to Indian Standard Time (`Asia/Kolkata`, UTC+05:30) across faculty reports, student history, and CSV exports.
 
 ---
 
@@ -62,6 +66,7 @@ com.attendance
 | **Encapsulation** | All model fields are `private`, exposed only through validated getters/setters; password hashes and HMAC secrets never leak | Model package |
 | **Interface (Abstraction Contract)** | Generic `Dao<T>` interface (`findById`, `findAll`, `save`, `update`, `delete`) applied by all DAO classes; `Attendable` interface for scanner contract | [`Dao.java`](src/main/java/com/attendance/dao/Dao.java), [`Attendable.java`](src/main/java/com/attendance/model/Attendable.java) |
 | **Singleton** | `DBConnection.getInstance()` manages the single connection pool instance for the JVM lifetime | [`DBConnection.java`](src/main/java/com/attendance/util/DBConnection.java) |
+| **Centralized Utility** | `DateTimeUtil` encapsulates UTC canonical conversion to Indian Standard Time (`Asia/Kolkata`) | [`DateTimeUtil.java`](src/main/java/com/attendance/util/DateTimeUtil.java) |
 
 ---
 
@@ -72,9 +77,9 @@ The database `attendance_db` uses **MySQL 8.0 InnoDB** with strict foreign key c
 ```
 users ──────┬──── teachers ──── courses ──┬──── enrollments ──── students
             │                             │
-            └──── students ───────────────┘
-                                          │
-                              qr_sessions ┤
+            └──── students ───────────────┼──── course_schedules 
+                                          │         │ (schedule_id)
+                              qr_sessions ┴─────────┘
                                           ├──── attendance ──── attendance_audit_log
                                           └──── scan_attempts
 ```
@@ -86,7 +91,8 @@ users ──────┬──── teachers ──── courses ──┬�
 | `students` | Student profile extending `users` | `UNIQUE(user_id)`, `UNIQUE(roll_number)` |
 | `courses` | Course catalogue | `UNIQUE(course_code)`, FK → `teachers` |
 | `enrollments` | Student ↔ Course membership | `UNIQUE(student_id, course_id)` |
-| `qr_sessions` | Active attendance session per class | `UNIQUE(session_token)`, `is_active` flag |
+| `course_schedules` | Planned semester lecture timetable | FK → `courses(id)`, `is_conducted` flag |
+| `qr_sessions` | Active attendance session per class | `UNIQUE(session_token)`, FK → `course_schedules(id)`, `is_active` |
 | `attendance` | Per-student per-session record | `UNIQUE(student_id, qr_session_id)` |
 | `attendance_audit_log` | Immutable override audit trail | Append-only (INSERT + SELECT only) |
 | `scan_attempts` | Fraud evidence & rate-limiting | Indexed on `(student_id, session_id)` |

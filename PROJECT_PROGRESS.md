@@ -14,6 +14,11 @@
 | **Stage 8** | Final academic submission readiness | ✅ APPROVED | 2026-10-20 |
 | **Stage 9** | Persistent Class Meetings & Timezone Standardization | ✅ APPROVED | 2026-10-20 |
 | **Stage 10** | 7-Second QR Token Timing & Monotonic Clock Synchronization Fix | ✅ APPROVED | 2026-11-01 |
+| **Stage 11** | Lecture Timetable & Planned Sessions Lifecycle | ✅ APPROVED | 2026-11-08 |
+| **Stage 12** | Session-Wise Attendance Reporting & Grid Filter UI | ✅ APPROVED | 2026-11-08 |
+| **Stage 13** | Timezone Standardization to Indian Standard Time (IST, UTC+05:30) | ✅ APPROVED | 2026-11-09 |
+| **Stage 14** | Planned Session Retirement on Session Close & Report Integrity | ✅ APPROVED | 2026-11-09 |
+| **Stage 15** | Professional UI Iconography & Sizing Polish | ✅ APPROVED | 2026-11-09 |
 
 ---
 
@@ -568,6 +573,59 @@ Automated browser performance instrumentation executed via Chrome DevTools Proto
 | **Page Refresh Idempotency** | Preserves active meeting session | Page reloaded cleanly with zero duplicate timers or meeting rows | ✅ PASS |
 | **Database Session Invariance** | Zero additional meeting rows | Initial Max Session ID `572` $\rightarrow$ Final Max Session ID `572` | ✅ PASS |
 | **Window Timer Singleton** | No competing intervals | `ACTIVE_SINGLETON(timer=true, timeout=true)` | ✅ PASS |
+
+---
+
+## Stage 11 — Lecture Timetable & Planned Sessions Lifecycle
+
+- **Objective:** Enable faculty to schedule lecture timeslots (day of week, start time, end time, room) and directly launch scheduled QR attendance sessions.
+- **Key Deliverables:**
+  - `course_schedules` table provisioned via `AppContextListener.java` and `schema.sql` with self-healing retry on table-missing error.
+  - Model `CourseSchedule.java` and DAO `CourseScheduleDao.java` with CRUD queries.
+  - Faculty dashboard (`teacher-dashboard.jsp`) UI to view weekly planned lecture schedules with live "Active Now" indicator during the lecture time window.
+  - Direct QR launch ("Start Now" button) passing `scheduleId` into `QrGenerateServlet.java`, automatically binding `qr_sessions.schedule_id`.
+
+---
+
+## Stage 12 — Session-Wise Attendance Reporting & Grid Filter UI
+
+- **Objective:** Allow faculty to filter attendance consolidated across all sessions or segregated for each individual lecture session.
+- **Key Deliverables:**
+  - Session selector dropdown in `attendance-report.jsp` with `#SES-XXXXX` identifier, scheduled timeslot, and session start date.
+  - Filtered session banner displaying active filter status, timeslot details, and a clear button.
+  - Redesigned responsive 3-column CSS Grid layout (`minmax(240px, 1.35fr) minmax(210px, 1.15fr) minmax(220px, 1.2fr)`) ensuring the search box perfectly aligns within the filter bar without visual hanging.
+
+---
+
+## Stage 13 — Timezone Standardization to Indian Standard Time (IST)
+
+- **Objective:** Eliminate the 5h 30m discrepancy caused by raw UTC display on the frontend, standardizing presentations to `Asia/Kolkata` (IST, UTC+05:30).
+- **Key Deliverables:**
+  - Centralized `DateTimeUtil.java` converting canonical UTC `LocalDateTime` / `Instant` / `Timestamp` to IST using `java.time.ZonedDateTime` without flawed manual arithmetic.
+  - Standardized presentation format: `dd MMM yyyy, hh:mm a` (e.g. `09 Nov 2026, 03:11 PM`).
+  - Standardized CSV export format: `yyyy-MM-dd HH:mm:ss`.
+  - Updated `attendance-report.jsp` (records table, session dropdown, banner, and audit log), `student-dashboard.jsp` (student history), and `ReportServlet.java`.
+
+---
+
+## Stage 14 — Planned Session Retirement & Historical Report Integrity
+
+- **Objective:** Automatically retire conducted planned sessions from the active planned list once attendance is closed, while preserving full report metadata.
+- **Key Deliverables:**
+  - Added `is_conducted BOOLEAN DEFAULT FALSE` column to `course_schedules`.
+  - `QrSessionDao.closeSession()` marks the associated `course_schedules.is_conducted = TRUE` upon session closure.
+  - `CourseScheduleDao.findByCourseId()` filters out conducted and closed sessions via subquery `AND cs.id NOT IN (SELECT qs.schedule_id FROM qr_sessions qs WHERE qs.schedule_id IS NOT NULL AND qs.is_active = FALSE)`.
+  - `findUpcomingClassesForStudent()` similarly excludes completed classes so students only see genuine upcoming lectures.
+  - Defensive `CourseScheduleDao.delete()` soft-retires rather than hard-deletes if attendance records exist, ensuring `LEFT JOIN course_schedules cs ON qs.schedule_id = cs.id` in `AttendanceDao` retains timeslot metadata in reports permanently.
+
+---
+
+## Stage 15 — Professional UI Iconography & Sizing Polish
+
+- **Objective:** Modernize user interface by replacing emojis with crisp, lightweight SVG icons scaled proportionally for an academic university portal aesthetic.
+- **Key Deliverables:**
+  - Inline SVG symbols (calendar, users, clock, check, stop, search, book, graduation cap) throughout navigation, tables, and dashboards.
+  - CSS styling tuned for high contrast, clean whitespace, and professional hierarchy preserving the primary `#582c83` purple academic theme.
 
 
 

@@ -17,7 +17,7 @@ ScanIn uses **MySQL 8.0 / TiDB Cloud** (MySQL 8.0 protocol-compatible), a Relati
 
 ## 2. Schema Design & Tables
 
-The database has **9 tables**, each with a clearly defined responsibility:
+The database has **10 tables**, each with a clearly defined responsibility:
 
 | Table | Real-world entity | Rows in demo |
 |---|---|---|
@@ -26,6 +26,7 @@ The database has **9 tables**, each with a clearly defined responsibility:
 | `students` | Student profile extending `users` | 5 |
 | `courses` | Course catalogue | 3 (CS501, CS502, IT501) |
 | `enrollments` | Student ↔ Course membership | 8 |
+| `course_schedules` | Planned semester lecture timeslots | Created per course schedule |
 | `qr_sessions` | A single live attendance class session | Created per session launch |
 | `attendance` | One attendance record per student per session | Created when student scans |
 | `attendance_audit_log` | Permanent log of every manual status change | Created on each override |
@@ -45,8 +46,9 @@ An **entity** is a real-world object; an **attribute** is a property of that ent
 | Student | `student_id` (PK), `user_id` (FK), `roll_number` (UNIQUE), `semester` |
 | Teacher | `teacher_id` (PK), `user_id` (FK), `employee_id` (UNIQUE) |
 | Course | `id` (PK), `course_code` (UNIQUE), `course_name`, `teacher_id` (FK) |
-| QrSession | `id` (PK), `session_token` (UNIQUE), `is_active`, `expires_at` |
-| Attendance | `id` (PK), `student_id` (FK), `qr_session_id` (FK), `status` |
+| CourseSchedule | `id` (PK), `course_id` (FK), `day_of_week`, `start_time`, `end_time`, `room`, `is_conducted` |
+| QrSession | `id` (PK), `course_id` (FK), `teacher_id` (FK), `schedule_id` (FK), `session_token` (UNIQUE), `is_active`, `expires_at` |
+| Attendance | `id` (PK), `student_id` (FK), `qr_session_id` (FK), `status`, `marked_at` |
 
 ### 3.2 Relationships and Cardinality
 
@@ -55,6 +57,8 @@ An **entity** is a real-world object; an **attribute** is a property of that ent
 | User has a profile | One-to-One (1:1) | `users` → `teachers` or `students` |
 | Teacher instructs Courses | One-to-Many (1:N) | `teachers` → `courses` |
 | Student enrolls in Courses | Many-to-Many (M:N) | `students` ↔ `courses` via `enrollments` |
+| Course has Planned Timetables | One-to-Many (1:N) | `courses` → `course_schedules` |
+| Planned Timetable links to Live QR Session | One-to-Many (1:N) | `course_schedules` → `qr_sessions` (`schedule_id`) |
 | Course has Sessions | One-to-Many (1:N) | `courses` → `qr_sessions` |
 | Session records Attendance | One-to-Many (1:N) | `qr_sessions` → `attendance` |
 | Attendance has Audit Entries | One-to-Many (1:N) | `attendance` → `attendance_audit_log` |
@@ -390,6 +394,27 @@ status ENUM('PRESENT','ABSENT','LATE','OD','EXCUSED')  -- no typos possible
 - `scan_attempts` stores only the **SHA-256 hash** of the token, never the raw token. Even if the table is compromised, no token can be extracted and replayed.
 - `attendance_audit_log` DAO only implements `INSERT` and `SELECT`. There is no `UPDATE` or `DELETE` method — the audit trail is immutable at the application layer.
 
+### 11.5 Soft Deletion & Referential Preservation vs. Hard Deletion
+In academic reporting systems, historical records must never lose their context. When a planned lecture timeslot is finished, hard-deleting the row (`DELETE FROM course_schedules WHERE id = ?`) would cause any historical query using:
+```sql
+LEFT JOIN course_schedules cs ON qs.schedule_id = cs.id
+```
+to return `NULL` for `cs.day_of_week`, `cs.start_time`, `cs.end_time`, and `cs.room`. Past attendance reports would lose the timeslot label.
+
+**The Solution:**
+1. A lifecycle state column `is_conducted BOOLEAN DEFAULT FALSE` is added to `course_schedules`.
+2. When the faculty finishes marking attendance and closes the QR session, `QrSessionDao.closeSession()` marks `course_schedules.is_conducted = TRUE`.
+3. The faculty dashboard queries only active/pending schedules using:
+   ```sql
+   WHERE cs.course_id = ?
+     AND (cs.is_conducted IS NULL OR cs.is_conducted = FALSE)
+     AND cs.id NOT IN (
+         SELECT qs.schedule_id FROM qr_sessions qs 
+         WHERE qs.schedule_id IS NOT NULL AND qs.is_active = FALSE
+     )
+   ```
+4. Even if faculty attempts to delete a timeslot via the UI, `CourseScheduleDao.delete()` detects if `qr_sessions` references it: if historical attendance exists, it soft-retires the record rather than executing a hard SQL `DELETE`, guaranteeing 100% referential integrity for all past reports.
+
 ---
 
 ## 12. Database Configuration & Deployment
@@ -415,6 +440,9 @@ On every container startup, `AppContextListener` runs:
 ```sql
 CREATE TABLE IF NOT EXISTS scan_attempts (...);
 CREATE TABLE IF NOT EXISTS attendance_audit_log (...);
+CREATE TABLE IF NOT EXISTS course_schedules (...);
+ALTER TABLE qr_sessions ADD COLUMN IF NOT EXISTS schedule_id INT NULL;
+ALTER TABLE course_schedules ADD COLUMN IF NOT EXISTS is_conducted BOOLEAN DEFAULT FALSE;
 ALTER TABLE qr_sessions MODIFY COLUMN session_token VARCHAR(255);
 ALTER TABLE attendance MODIFY COLUMN status ENUM('PRESENT','ABSENT','LATE','OD','EXCUSED');
 ```
@@ -426,16 +454,18 @@ This ensures the schema is always current even when deploying to a fresh databas
 
 | DBMS Concept | Where it's applied |
 |---|---|
-| Relational model | Entire `attendance_db` schema |
+| Relational model | Entire `attendance_db` schema (10 tables) |
 | ER diagram (entities, relationships) | [`database/schema.sql`](../database/schema.sql) |
 | 1NF | Atomic values, no repeating groups (`enrollments` table) |
 | 2NF | No partial dependencies (`enrollments.enrolled_at` depends on full composite key) |
 | 3NF | No transitive dependencies (student name not stored in `attendance`) |
 | Primary keys | `INT AUTO_INCREMENT PRIMARY KEY` on all tables |
-| Foreign keys + CASCADE | `students.user_id → users.id ON DELETE CASCADE` |
+| Foreign keys + CASCADE | `students.user_id → users.id ON DELETE CASCADE`, `course_schedules.course_id → courses.id` |
+| Foreign keys + SET NULL | `qr_sessions.schedule_id → course_schedules.id` |
 | UNIQUE constraint | `users.email`, `students.roll_number`, `unique_attendance`, `unique_enrollment` |
 | ENUM domain integrity | `users.role`, `attendance.status` |
-| SELECT with JOIN | `AttendanceDao` report queries, `ReportServlet` |
+| SELECT with LEFT JOIN | `AttendanceDao` & `QrSessionDao` report queries joining `course_schedules` |
+| Soft Deletion / State Lifecycle | `course_schedules.is_conducted` preserving report referential integrity |
 | Aggregate functions (COUNT, ROUND) | Attendance % query in `StudentDashboardServlet` |
 | Transactions (ACID) | Manual override in `AttendanceManualServlet` |
 | Atomic INSERT on conflict | `AttendanceDao` duplicate-key catch (error 1062) |
