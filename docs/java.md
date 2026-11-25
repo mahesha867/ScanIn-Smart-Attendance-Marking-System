@@ -1,638 +1,863 @@
-# Java Concepts & Implementation — ScanIn
+# ☕ Java & Object-Oriented Programming (OOP) Implementation Guide — ScanIn
 
-This document explains every core Java concept used in the ScanIn project — what the concept is, why it was used, and exactly where it appears in the source code. Use this as your presentation reference.
+This comprehensive technical document provides a clean, in-depth, and well-structured explanation of the **Java architecture**, **Object-Oriented Programming (OOP)** paradigms, **design patterns**, **concurrency/thread safety**, and **cryptographic primitives** implemented across the **ScanIn Smart Attendance Marking System**.
+
+Use this document as an authoritative technical reference for project presentations, viva defenses, architectural reviews, and developer onboarding.
 
 ---
 
-## 1. Object-Oriented Programming (OOP)
+## 📑 Table of Contents
+1. [Core Architectural Overview](#1-core-architectural-overview)
+2. [Object-Oriented Programming (OOP) Pillars](#2-object-oriented-programming-oop-pillars)
+   - 2.1 [Abstraction (`User.java`, `Dao<T>`)](#21-abstraction--userjava-daot)
+   - 2.2 [Inheritance (`Teacher.java`, `Student.java`)](#22-inheritance--teacherjava-studentjava)
+   - 2.3 [Polymorphism & Dynamic Dispatch (`LoginServlet.java`)](#23-polymorphism--dynamic-dispatch--loginservletjava)
+   - 2.4 [Encapsulation & Defensive Design (Domain Models)](#24-encapsulation--defensive-design-domain-models)
+   - 2.5 [Interface Contracts (`Dao<T>`, `Attendable.java`)](#25-interface-contracts--daot-attendablejava)
+3. [Software Design Patterns](#3-software-design-patterns)
+   - 3.1 [Singleton Pattern (`DBConnection.java`)](#31-singleton-pattern--dbconnectionjava)
+   - 3.2 [Data Access Object (DAO) Pattern](#32-data-access-object-dao-pattern)
+   - 3.3 [Model-View-Controller (MVC) Architectural Pattern](#33-model-view-controller-mvc-architectural-pattern)
+   - 3.4 [Utility / Pure Static Class Pattern (`QrCodeUtil`, `DateTimeUtil`)](#34-utility--pure-static-class-pattern--qrcodeutil-datetimeutil)
+   - 3.5 [Lifecycle State Pattern (`CourseSchedule.java`)](#35-lifecycle-state-pattern--courseschedulejava)
+4. [Enterprise Web Architecture (Jakarta Servlet & Filter API)](#4-enterprise-web-architecture-jakarta-servlet--filter-api)
+   - 4.1 [Servlet Lifecycle & Request Pipeline](#41-servlet-lifecycle--request-pipeline)
+   - 4.2 [Interception & Role-Based Access Control (`SecurityFilter.java`)](#42-interception--role-based-access-control--securityfilterjava)
+   - 4.3 [HTTP State & Session Management (`SessionUtil.java`)](#43-http-state--session-management--sessionutiljava)
+   - 4.4 [Application Bootstrapping (`AppContextListener.java`)](#44-application-bootstrapping--appcontextlistenerjava)
+5. [Database Persistence & Concurrency (JDBC)](#5-database-persistence--concurrency-jdbc)
+   - 5.1 [SQL Injection Prevention via `PreparedStatement`](#51-sql-injection-prevention-via-preparedstatement)
+   - 5.2 [Automatic Resource Management (`try-with-resources`)](#52-automatic-resource-management--try-with-resources)
+   - 5.3 [Transaction Demarcation (`commit` & `rollback`)](#53-transaction-demarcation--commit--rollback)
+   - 5.4 [Handling Database Race Conditions (Error Code 1062)](#54-handling-database-race-conditions-error-code-1062)
+6. [Cryptography & Anti-Proxy Security Engine](#6-cryptography--anti-proxy-security-engine)
+   - 6.1 [HMAC-SHA256 Cryptographic Token Generation](#61-hmac-sha256-cryptographic-token-generation)
+   - 6.2 [Constant-Time Signature Verification (Anti-Timing Attacks)](#62-constant-time-signature-verification-anti-timing-attacks)
+   - 6.3 [6-Digit TOTP Dynamic Truncation (RFC 6238 Fallback)](#63-6-digit-totp-dynamic-truncation-rfc-6238-fallback)
+   - 6.4 [Adaptive Salting & BCrypt Password Hashing](#64-adaptive-salting--bcrypt-password-hashing)
+7. [Modern Java LTS Idioms & Quality Standards](#7-modern-java-lts-idioms--quality-standards)
+   - 7.1 [Null Safety with `Optional<T>`](#71-null-safety-with-optionalt)
+   - 7.2 [Modern Date-Time API (`java.time.*`) & Centralized UTC/IST Engine](#72-modern-date-time-api-javatime-centralized-utcist-engine)
+   - 7.3 [Type-Safe Generics & Collections Framework](#73-type-safe-generics--collections-framework)
+   - 7.4 [Thread-Safety & Multi-Threading Model](#74-thread-safety--multi-threading-model)
+8. [Summary Mapping (Concepts → Source Files)](#8-summary-mapping-concepts--source-files)
+9. [Viva Defense / Interview Questions & Master Answers](#9-viva-defense--interview-questions--master-answers)
 
-### 1.1 Abstraction — `User.java`
+---
 
-**What it is:** Abstraction means hiding implementation details and exposing only the essential interface. In Java, this is done with `abstract` classes and interfaces.
+## 1. Core Architectural Overview
 
-**How ScanIn uses it:**
-```java
-// User.java
-public abstract class User {
-    private int id;
-    private String name;
-    private String email;
-    private String password;   // always BCrypt-hashed, never plain text
+ScanIn is built using **Java 21 LTS** running on the **Apache Tomcat 10.1+ (Jakarta EE 10)** servlet container. The application enforces a strict **Model-View-Controller (MVC)** separation of concerns:
 
-    // Abstract methods — WHAT to do is defined here, HOW is left to subclasses
-    public abstract String getDashboardPath();  // Teacher → /teacher/dashboard
-    public abstract String getRoleInfo();       // Student → "Student | CS | Sem 5"
-}
 ```
-- `User` cannot be instantiated directly — the system never creates a "generic user".
-- Callers only need to call `user.getDashboardPath()` without knowing whether the object is a Teacher or Student.
-
-**File:** [`src/main/java/com/attendance/model/User.java`](../src/main/java/com/attendance/model/User.java)
-
----
-
-### 1.2 Inheritance — `Teacher.java` and `Student.java`
-
-**What it is:** Inheritance lets one class acquire the fields and behaviour of another using `extends`. The child class adds its own fields on top.
-
-**How ScanIn uses it:**
-```java
-// Teacher.java
-public class Teacher extends User {
-    private int teacherId;
-    private String employeeId;   // e.g. "EMP001"
-    private String department;
-
-    @Override
-    public String getDashboardPath() { return "/teacher/dashboard"; }
-
-    @Override
-    public String getRoleInfo() { return "Faculty | " + department; }
-}
-
-// Student.java
-public class Student extends User {
-    private int studentId;
-    private String rollNumber;   // e.g. "CS2021001"
-    private String department;
-    private int semester;
-
-    @Override
-    public String getDashboardPath() { return "/student/dashboard"; }
-}
+[ Client Browser / Scanner ]
+           │  HTTP Requests (GET / POST)
+           ▼
+[ SecurityFilter (RBAC) ] ── (Rejects unauthorized sessions / redirects to /login)
+           │
+           ▼
+   [ Controller Layer ]
+  (Jakarta Servlets: LoginServlet, QrScanServlet, QrGenerateServlet, ReportServlet)
+           │
+           ├──► Business / Crypto Logic: QrCodeUtil, PasswordUtil, DateTimeUtil
+           │
+           ▼
+     [ Model Layer ]
+ (Domain Entities: User, Teacher, Student, Course, QrSession, Attendance)
+           │
+           ▼
+     [ DAO Layer ] ◄── Uses Generic Contract: Dao<T>
+ (UserDao, StudentDao, TeacherDao, CourseDao, QrSessionDao, AttendanceDao)
+           │
+           ▼
+   [ DBConnection ] ── (Singleton Connection Pool: Tomcat JDBC Pool)
+           │
+           ▼
+ [ MySQL 8.0 / TiDB Serverless Cloud DB ]
 ```
-- Both `Teacher` and `Student` automatically inherit `id`, `name`, `email`, `password`, `phone`, `createdAt` from `User`.
-- They add their own domain-specific fields without duplicating the common fields.
-
-**Files:**
-- [`src/main/java/com/attendance/model/Teacher.java`](../src/main/java/com/attendance/model/Teacher.java)
-- [`src/main/java/com/attendance/model/Student.java`](../src/main/java/com/attendance/model/Student.java)
 
 ---
 
-### 1.3 Polymorphism — `LoginServlet.java`
+## 2. Object-Oriented Programming (OOP) Pillars
 
-**What it is:** Polymorphism means "many forms" — the same method call behaves differently depending on the actual type of the object at runtime (dynamic dispatch).
+OOP enables clean domain modeling, robust security boundaries, modular maintainability, and code reuse across the application.
 
-**How ScanIn uses it:**
-```java
-// LoginServlet.java — after successful login
-User user = userDao.findByEmail(email);   // could be Teacher or Student
-
-// Same call, different behaviour at runtime
-String dashboardPath = user.getDashboardPath();
-// If user is a Teacher  → "/teacher/dashboard"
-// If user is a Student  → "/student/dashboard"
-
-response.sendRedirect(request.getContextPath() + dashboardPath);
 ```
-- The servlet never checks `if (user instanceof Teacher)` — it relies on the polymorphic contract.
-- Adding a new role (e.g. Admin) only requires a new subclass; the servlet needs no change.
-
-**File:** [`src/main/java/com/attendance/servlet/LoginServlet.java`](../src/main/java/com/attendance/servlet/LoginServlet.java)
-
----
-
-### 1.4 Encapsulation — All Model Classes
-
-**What it is:** Encapsulation means keeping fields `private` and exposing them only through controlled `public` getters and setters. This protects the object's internal state.
-
-**How ScanIn uses it:**
-```java
-// All model classes follow this pattern
-public class QrSession {
-    private int id;
-    private String sessionToken;   // never accessible directly
-    private boolean isActive;
-
-    public int getId()                  { return id; }
-    public String getSessionToken()     { return sessionToken; }
-    public boolean isActive()           { return isActive; }
-    // No public setter for sessionToken — only the DAO layer writes it
-}
+                           ┌────────────────────────┐
+                           │  <<abstract>> User     │
+                           ├────────────────────────┤
+                           │ - id: int              │
+                           │ - name: String         │
+                           │ - email: String        │
+                           │ - password: String     │
+                           ├────────────────────────┤
+                           │ + getDashboardPath()*  │
+                           │ + getRoleInfo()*       │
+                           └───────────▲────────────┘
+                                       │
+                      ┌────────────────┴────────────────┐
+                      │                                 │
+           ┌──────────┴──────────┐           ┌──────────┴──────────┐
+           │       Teacher       │           │       Student       │
+           ├─────────────────────┤           ├─────────────────────┤
+           │ - teacherId: int    │           │ - studentId: int    │
+           │ - employeeId: String│           │ - rollNumber: String│
+           │ - department: String│           │ - department: String│
+           │                     │           │ - semester: int     │
+           ├─────────────────────┤           ├─────────────────────┤
+           │ + getDashboardPath()│           │ + getDashboardPath()│
+           │ + getRoleInfo()     │           │ + getRoleInfo()     │
+           └─────────────────────┘           └──────────▲──────────┘
+                                                        │ implements
+                                             ┌──────────┴──────────┐
+                                             │    <<interface>>    │
+                                             │     Attendable      │
+                                             ├─────────────────────┤
+                                             │+canMarkAttendance() │
+                                             └─────────────────────┘
 ```
-- Password fields are always stored as BCrypt hashes. There is no method that returns the original plain-text password anywhere in the codebase.
-- The HMAC secret key is a `private static final` constant in `QrCodeUtil` — no external class can access it.
+
+### 2.1 Abstraction (`User.java`, `Dao<T>`)
+
+**Concept:** Abstraction isolates essential interface definitions from underlying execution mechanisms. In Java, abstraction is realized through `abstract` classes and `interface` declarations.
+
+**In ScanIn:**
+- In [`User.java`](../src/main/java/com/attendance/model/User.java), the class is declared `public abstract class User`. The system prevents instantiation of a generic "User" because every authenticated actor is either a faculty member or an enrolled student.
+- The base class specifies abstract contractual methods that every subclass must implement:
+  ```java
+  public abstract class User {
+      private int id;
+      private String name;
+      private String email;
+      private String password; // BCrypt hashed string ($2a$10$...)
+      private String role;     // TEACHER, STUDENT, ADMIN
+      private String phone;
+      private Timestamp createdAt;
+
+      // Abstract template methods: WHAT to execute is mandated; HOW is delegated
+      public abstract String getDashboardPath();
+      public abstract String getRoleInfo();
+  }
+  ```
+- **Architectural Benefit:** Higher-level application code interacts purely with `User` abstractions without coupling itself to concrete role hierarchies.
 
 ---
 
-### 1.5 Interface — `Dao<T>` and `Attendable`
+### 2.2 Inheritance (`Teacher.java`, `Student.java`)
 
-**What it is:** An `interface` defines a pure contract (what methods must exist) without providing any implementation. Any class that `implements` the interface must provide all the method bodies.
+**Concept:** Inheritance allows a specialized class to extend a generalized base class (`class Child extends Parent`), inheriting fields and method implementations while introducing domain-specific state.
 
-**`Dao<T>` — Generic Data Access Contract:**
+**In ScanIn:**
+- [`Teacher.java`](../src/main/java/com/attendance/model/Teacher.java) and [`Student.java`](../src/main/java/com/attendance/model/Student.java) both extend `User`:
+  ```java
+  public class Teacher extends User {
+      private int teacherId;
+      private String employeeId;
+      private String department;
+
+      @Override
+      public String getDashboardPath() {
+          return "/teacher/dashboard";
+      }
+
+      @Override
+      public String getRoleInfo() {
+          return "Faculty | " + department;
+      }
+  }
+
+  public class Student extends User implements Attendable {
+      private int studentId;
+      private String rollNumber;
+      private String department;
+      private int semester;
+
+      @Override
+      public String getDashboardPath() {
+          return "/student/dashboard";
+      }
+
+      @Override
+      public String getRoleInfo() {
+          return "Student | " + department + " | Sem " + semester;
+      }
+  }
+  ```
+- **Architectural Benefit:** Common identity fields (`id`, `name`, `email`, `password`, `createdAt`) are defined in exactly one place (`User.java`), eliminating duplicated fields across models.
+
+---
+
+### 2.3 Polymorphism & Dynamic Dispatch (`LoginServlet.java`)
+
+**Concept:** Polymorphism allows a single method call to execute different runtime logic based on the actual concrete type of the object invoking it (dynamic method dispatch).
+
+**In ScanIn:**
+- In [`LoginServlet.java`](../src/main/java/com/attendance/servlet/LoginServlet.java), post-authentication routing is executed without fragile conditional branching:
+  ```java
+  // Polymorphic reference: runtime object can be Teacher or Student
+  User user = userDao.findByEmail(email);
+
+  // Dynamic dispatch resolves destination URL at runtime:
+  String redirectUrl = request.getContextPath() + user.getDashboardPath();
+  response.sendRedirect(redirectUrl);
+  ```
+- **Why this is superior:** No `if (user instanceof Teacher)` or `switch (user.getRole())` checks are required. If an `Admin` or `Auditor` role is introduced in the future, only a new `Admin extends User` class is created—`LoginServlet` requires **zero code modifications**, satisfying the **Open/Closed Principle (OCP)**.
+
+---
+
+### 2.4 Encapsulation & Defensive Design (Domain Models)
+
+**Concept:** Encapsulation hides the internal state of an object, requiring all external operations to pass through controlled `public` accessor (getter) and mutator (setter) methods.
+
+**In ScanIn:**
+- All entity fields are declared strictly `private`.
+- **Defensive Immutability:** Sensitive properties (such as password hashes, cryptographic salt values, and session IDs) do not expose open public setters.
+  ```java
+  public class QrSession {
+      private int id;
+      private String sessionToken;
+      private boolean active;
+      private LocalDateTime expiresAt;
+
+      // Accessors provide controlled, read-only visibility
+      public int getId() { return id; }
+      public String getSessionToken() { return sessionToken; }
+      public boolean isActive() { return active; }
+      public LocalDateTime getExpiresAt() { return expiresAt; }
+
+      // Mutators validate invariant boundaries before applying state changes
+      public void setActive(boolean active) {
+          this.active = active;
+      }
+  }
+  ```
+- **Password Security Guarantee:** The plain-text password is never stored or returned as a field anywhere in the application. Once hashed via BCrypt, only the irreversible hash is held in memory.
+
+---
+
+### 2.5 Interface Contracts (`Dao<T>`, `Attendable.java`)
+
+**Concept:** An `interface` defines a contract of behavior without coupling callers to specific data stores, protocols, or storage engines.
+
+#### 1. Generic Data Access Interface: `Dao<T>`
+[`Dao.java`](../src/main/java/com/attendance/dao/Dao.java) standardizes CRUD operations across all database entities:
 ```java
-// Dao.java
 public interface Dao<T> {
     Optional<T> findById(int id);
-    List<T>     findAll();
-    boolean     save(T entity);
-    boolean     update(T entity);
-    boolean     delete(int id);
+    List<T> findAll();
+    boolean save(T entity);
+    boolean update(T entity);
+    boolean delete(int id);
 }
 ```
-Every DAO class implements this:
-```
-UserDao         implements Dao<User>
-StudentDao      implements Dao<Student>
-QrSessionDao    implements Dao<QrSession>
-AttendanceDao   implements Dao<Attendance>
-```
-This guarantees a uniform API across all data access — if you know how to use `UserDao`, you already know the shape of every other DAO.
+All concrete DAO implementations (`UserDao`, `StudentDao`, `QrSessionDao`, `AttendanceDao`) implement this interface, guaranteeing consistent method signatures throughout the persistence layer.
 
-**`Attendable` — Scanner Capability Contract:**
+#### 2. Scanner Behavioral Capability: `Attendable.java`
+[`Attendable.java`](../src/main/java/com/attendance/model/Attendable.java) defines scanner participation:
 ```java
 public interface Attendable {
     boolean canMarkAttendance(String token);
 }
 ```
-`Student` implements `Attendable`, which lets the scan servlet confirm the user has the scanning capability at compile time, not just at runtime.
-
-**Files:**
-- [`src/main/java/com/attendance/dao/Dao.java`](../src/main/java/com/attendance/dao/Dao.java)
-- [`src/main/java/com/attendance/model/Attendable.java`](../src/main/java/com/attendance/model/Attendable.java)
+`Student` implements `Attendable`, allowing servlets to verify scanning privileges at compile-time rather than relying solely on string-based role comparisons.
 
 ---
 
-## 2. Design Patterns
+## 3. Software Design Patterns
 
-### 2.1 Singleton Pattern — `DBConnection.java`
+ScanIn incorporates proven enterprise Gang-of-Four (GoF) design patterns to solve common architectural challenges.
 
-**What it is:** The Singleton pattern ensures only one instance of a class exists in the entire JVM, providing a single global access point.
+### 3.1 Singleton Pattern (`DBConnection.java`)
 
-**How ScanIn uses it:**
+**Problem:** Establishing a new database connection over TCP/TLS takes ~100ms. If every incoming HTTP request opened a separate connection, the application would exhaust database file descriptors and crash under high concurrency.
+
+**Solution:** The Singleton Pattern ensures only **one** instance of the connection pool manager exists in the entire JVM:
+
 ```java
-// DBConnection.java
 public class DBConnection {
-    private static DBConnection instance;   // the one and only instance
-    private final DataSource dataSource;    // Apache Tomcat JDBC pool
+    // The single JVM-wide instance
+    private static DBConnection instance;
+    private final DataSource dataSource;
 
+    // Private constructor blocks direct instantiation (new DBConnection())
     private DBConnection() {
-        // Connection pool setup: maxActive=20, testOnBorrow=true
         PoolProperties p = new PoolProperties();
-        p.setMaxActive(20);
+        p.setUrl(Config.get("db.url"));
+        p.setUsername(Config.get("db.user"));
+        p.setPassword(Config.get("db.password"));
+        p.setDriverClassName("com.mysql.cj.jdbc.Driver");
         p.setInitialSize(5);
-        p.setTestOnBorrow(true);          // validates connection before use
+        p.setMaxActive(20);
+        p.setMaxIdle(10);
+        p.setMinIdle(5);
+        p.setTestOnBorrow(true);
         p.setValidationQuery("SELECT 1");
-        // ...
+
+        org.apache.tomcat.jdbc.pool.DataSource ds = new org.apache.tomcat.jdbc.pool.DataSource();
+        ds.setPoolProperties(p);
+        this.dataSource = ds;
     }
 
+    // Thread-safe synchronized accessor
     public static synchronized DBConnection getInstance() {
         if (instance == null) {
-            instance = new DBConnection();  // created once
+            instance = new DBConnection();
         }
         return instance;
     }
 
+    // Lends a pre-warmed connection from the Tomcat JDBC pool
     public Connection getConnection() throws SQLException {
-        return this.dataSource.getConnection();  // borrows from pool
+        return this.dataSource.getConnection();
     }
 }
 ```
-- **Why Singleton?** Creating a new database connection pool on every request would be catastrophically slow (each TCP + TLS handshake takes ~100ms). The pool keeps 5–20 connections open and lends them out instantly.
-- `synchronized` prevents two threads from both seeing `instance == null` and creating two pools (race condition protection).
-
-**File:** [`src/main/java/com/attendance/util/DBConnection.java`](../src/main/java/com/attendance/util/DBConnection.java)
 
 ---
 
-### 2.2 DAO Pattern — All DAO Classes
+### 3.2 Data Access Object (DAO) Pattern
 
-**What it is:** The Data Access Object (DAO) pattern separates the business logic from the data persistence logic. Servlets talk to DAOs; DAOs talk to the database.
+**Concept:** Decouples the presentation and servlet layer from SQL queries, connection logic, and relational mapping.
 
-**Flow:**
+**Implementation Architecture:**
 ```
-HTTP Request
-    → Servlet
-        → DAO (SQL query)
-            → DBConnection (pool)
-                → MySQL
-            ← ResultSet
-        ← Model object (e.g. QrSession)
-    ← HTTP Response (JSP rendered)
+[Servlet Layer: QrScanServlet]
+        │ Calls high-level method: attendanceDao.markAttendance(...)
+        ▼
+[DAO Layer: AttendanceDao]
+        │ Prepares SQL, sets parameters, executes updates
+        ▼
+[Data Mapper Helper]
+        │ Maps ResultSet rows into strongly-typed Java domain objects
+        ▼
+[Model: Attendance]
 ```
 
-**Example — `QrSessionDao`:**
+**Concrete Example from `QrSessionDao.java`:**
 ```java
-public Optional<QrSession> findById(int id) {
-    String sql = "SELECT * FROM qr_sessions WHERE id = ?";
+public Optional<QrSession> findActiveSession(int courseId) {
+    String sql = "SELECT * FROM qr_sessions WHERE course_id = ? AND is_active = TRUE LIMIT 1";
     try (Connection conn = DBConnection.getInstance().getConnection();
          PreparedStatement ps = conn.prepareStatement(sql)) {
-        ps.setInt(1, id);
-        ResultSet rs = ps.executeQuery();
-        if (rs.next()) {
-            QrSession session = mapRow(rs);  // convert ResultSet → object
-            return Optional.of(session);
+        
+        ps.setInt(1, courseId);
+        try (ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                return Optional.of(mapResultSetToQrSession(rs));
+            }
         }
-    } catch (SQLException e) { ... }
+    } catch (SQLException e) {
+        LOGGER.error("Error reading active QR session for course: " + courseId, e);
+    }
     return Optional.empty();
 }
 ```
-- Uses `PreparedStatement` (never `Statement`) to prevent SQL injection.
-- Returns `Optional<T>` instead of `null` — callers must explicitly handle the "not found" case.
 
 ---
 
-## 3. Jakarta Servlet API
+### 3.3 Model-View-Controller (MVC) Architectural Pattern
 
-### 3.1 What is a Servlet?
+ScanIn divides responsibilities across distinct tiers:
+1. **Model:** Plain Old Java Objects (POJOs) in `com.attendance.model.*` representing database records and operational data structures (`User`, `Course`, `Attendance`).
+2. **View:** JavaServer Pages (JSPs) in `/src/main/webapp/WEB-INF/views/` handling HTML rendering, Tailwind styling, and presentation.
+3. **Controller:** Jakarta Servlets in `com.attendance.servlet.*` processing incoming HTTP requests, orchestrating business logic, updating models via DAOs, and forwarding to views.
 
-A **Servlet** is a Java class that handles HTTP requests. It extends `HttpServlet` and overrides `doGet()` / `doPost()`. Tomcat (the Servlet container) manages the servlet lifecycle.
-
-**Lifecycle:**
-```
-1. Tomcat loads the WAR → calls servlet.init()   (once per JVM lifetime)
-2. HTTP request arrives → Tomcat calls doGet() or doPost()   (per request, on a thread)
-3. Tomcat shutdown → calls servlet.destroy()
-```
-
-### 3.2 Key Servlets in ScanIn
-
-| Servlet | URL Mapping | Purpose |
-|---|---|---|
-| `LoginServlet` | `/login` | Authenticates user, creates session |
-| `QrGenerateServlet` | `/qr/generate` | Teacher launches live QR session |
-| `QrScanServlet` | `/qr/scan` | Student scans/types QR token |
-| `TeacherDashboardServlet` | `/teacher/dashboard` | Faculty course overview |
-| `StudentDashboardServlet` | `/student/dashboard` | Student attendance % view |
-| `ReportServlet` | `/reports` | Faculty attendance reports & manual overrides |
-| `AttendanceManualServlet` | `/attendance/manual` | Faculty edits a student status |
-
-**Registration (annotation-based):**
 ```java
-@WebServlet(name = "QrScanServlet", urlPatterns = {"/qr/scan"})
-public class QrScanServlet extends HttpServlet {
+// Controller: TeacherDashboardServlet.java
+@Override
+protected void doGet(HttpServletRequest req, HttpServletResponse resp) 
+        throws ServletException, IOException {
+    User user = SessionUtil.getLoggedInUser(req);
+    Teacher teacher = teacherDao.findByUserId(user.getId()).orElseThrow();
+    
+    // Model hydration
+    List<Course> courses = courseDao.findByTeacherId(teacher.getTeacherId());
+    req.setAttribute("courses", courses);
+    req.setAttribute("teacher", teacher);
 
-    @Override
-    public void init() throws ServletException {
-        // DAO objects created once — thread-safe reads only
-        this.qrSessionDao = new QrSessionDao();
-        this.attendanceDao = new AttendanceDao();
-    }
-
-    @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-        // Handle QR scan from camera (GET with ?token=...)
-    }
-
-    @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-        // Handle typed numeric fallback code (POST form)
-    }
+    // Forwarding to View
+    req.getRequestDispatcher("/WEB-INF/views/teacher-dashboard.jsp").forward(req, resp);
 }
 ```
 
-### 3.3 `SecurityFilter` — Jakarta Filter API
+---
 
-**What it is:** A `Filter` intercepts every HTTP request before it reaches a servlet. It can inspect, modify, or reject the request.
+### 3.4 Utility / Pure Static Class Pattern (`QrCodeUtil`, `DateTimeUtil`)
 
-**How `SecurityFilter` works:**
+Classes containing stateless mathematical, cryptographic, or conversion algorithms are implemented as final utility classes:
+- Declared `public final class`.
+- Private default constructor (`private QrCodeUtil() {}`) to prevent instantiation.
+- Methods declared `public static` and side-effect-free (pure functions).
+
+---
+
+### 3.5 Lifecycle State Pattern (`CourseSchedule.java`)
+
+Academic lecture scheduling tracks clear state progressions:
+$$\text{Planned / Scheduled} \longrightarrow \text{Active Live QR Session} \longrightarrow \text{Conducted / Retired}$$
+
+- When faculty clicks **"Start Now"**, the schedule ID is linked to the newly generated `qr_sessions` record.
+- When faculty clicks **"End Session & Mark Absentees"**, the system flags `course_schedules.is_conducted = TRUE`.
+- **Soft Lifecycle State:** The scheduled slot is retired from the active dashboard view without deleting historical database records, keeping past attendance reports intact.
+
+---
+
+## 4. Enterprise Web Architecture (Jakarta Servlet & Filter API)
+
+### 4.1 Servlet Lifecycle & Request Pipeline
+
+Each servlet in ScanIn follows the standard Jakarta EE container lifecycle:
+
+```
+[Tomcat Boot / First Request]
+        │
+        ├──► 1. init(ServletConfig config) ── Instantiates DAOs and read-only resources
+        │
+[Per Incoming Request Thread]
+        │
+        ├──► 2. service(request, response)
+        │         ├── Calls doGet(request, response)
+        │         └── Calls doPost(request, response)
+        │
+[Server Shutdown / Undeploy]
+        │
+        └──► 3. destroy() ── Closes any held resources
+```
+
+**Thread Safety Rule:** Servlets are instantiated as singletons by Tomcat. Multiple threads execute `doGet()` and `doPost()` simultaneously. ScanIn maintains zero mutable instance variables inside servlets; all per-request state is confined strictly to method-local variables.
+
+---
+
+### 4.2 Interception & Role-Based Access Control (`SecurityFilter.java`)
+
+[`SecurityFilter.java`](../src/main/java/com/attendance/filter/SecurityFilter.java) forms the perimeter security gateway:
+
 ```java
 @WebFilter(filterName = "SecurityFilter", urlPatterns = {"/*"})
 public class SecurityFilter implements Filter {
 
     @Override
-    public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain) {
-        String path = request.getRequestURI();
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+        HttpServletRequest req = (HttpServletRequest) request;
+        HttpServletResponse res = (HttpServletResponse) response;
+        String uri = req.getRequestURI();
 
-        // 1. Static assets → pass through immediately
-        if (isStaticAsset(path)) { chain.doFilter(req, res); return; }
-
-        // 2. Public routes → pass through
-        if (path.equals("/login")) { chain.doFilter(req, res); return; }
-
-        // 3. No session → redirect to login
-        User user = SessionUtil.getLoggedInUser(request);
-        if (user == null) { response.sendRedirect("/login"); return; }
-
-        // 4. RBAC check
-        if (path.startsWith("/teacher") && !"TEACHER".equals(user.getRole())) {
-            response.sendError(403, "Access Denied");   // HTTP 403 Forbidden
+        // 1. Allow static resources (CSS, JS, SVGs, images)
+        if (uri.contains("/css/") || uri.contains("/js/") || uri.contains("/assets/")) {
+            chain.doFilter(request, response);
             return;
         }
 
-        chain.doFilter(req, res);  // authorized — continue to servlet
+        // 2. Allow unauthenticated authentication endpoints
+        if (uri.endsWith("/login") || uri.endsWith("/register")) {
+            chain.doFilter(request, response);
+            return;
+        }
+
+        // 3. Verify active server-side HTTP session
+        User user = SessionUtil.getLoggedInUser(req);
+        if (user == null) {
+            res.sendRedirect(req.getContextPath() + "/login");
+            return;
+        }
+
+        // 4. Role-Based Access Control (RBAC) checks
+        if (uri.startsWith(req.getContextPath() + "/teacher") && !"TEACHER".equals(user.getRole())) {
+            res.sendError(HttpServletResponse.SC_FORBIDDEN, "Unauthorized role access");
+            return;
+        }
+        if (uri.startsWith(req.getContextPath() + "/student") && !"STUDENT".equals(user.getRole())) {
+            res.sendError(HttpServletResponse.SC_FORBIDDEN, "Unauthorized role access");
+            return;
+        }
+
+        // Authorized: continue through filter chain to the servlet
+        chain.doFilter(request, response);
     }
 }
 ```
-- **Why a Filter and not inside each servlet?** Putting access checks in the filter means they cannot be bypassed. Even if a new servlet is added, the filter still runs for it.
-
-**File:** [`src/main/java/com/attendance/filter/SecurityFilter.java`](../src/main/java/com/attendance/filter/SecurityFilter.java)
 
 ---
 
-## 4. Session Management
+### 4.3 HTTP State & Session Management (`SessionUtil.java`)
 
-**What it is:** HTTP is stateless — each request is independent. Sessions allow the server to remember who is logged in across multiple requests.
+HTTP is a stateless protocol. ScanIn manages state through server-side sessions bound to an encrypted browser cookie (`JSESSIONID`).
 
-**How ScanIn uses it:**
-```java
-// SessionUtil.java
-public class SessionUtil {
-    private static final String USER_KEY = "loggedInUser";
+- Server-side state is stored in memory by Tomcat; the client only receives an opaque session identifier.
+- `SessionUtil.java` wraps session handling to ensure safe casting and centralized access:
+  ```java
+  public class SessionUtil {
+      private static final String USER_ATTR = "LOGGED_IN_USER";
 
-    public static void setLoggedInUser(HttpServletRequest req, User user) {
-        req.getSession(true).setAttribute(USER_KEY, user);
-    }
+      public static void setLoggedInUser(HttpServletRequest req, User user) {
+          HttpSession session = req.getSession(true);
+          session.setAttribute(USER_ATTR, user);
+      }
 
-    public static User getLoggedInUser(HttpServletRequest req) {
-        HttpSession session = req.getSession(false);  // false = don't create new
-        return (session != null) ? (User) session.getAttribute(USER_KEY) : null;
-    }
-}
-```
-- Tomcat stores session data server-side. Only a session ID cookie (`JSESSIONID`) is sent to the browser.
-- `getSession(false)` returns `null` if no session exists — this is how the filter detects unauthenticated requests.
+      public static User getLoggedInUser(HttpServletRequest req) {
+          HttpSession session = req.getSession(false); // Do not force creation
+          return (session != null) ? (User) session.getAttribute(USER_ATTR) : null;
+      }
+
+      public static void invalidate(HttpServletRequest req) {
+          HttpSession session = req.getSession(false);
+          if (session != null) {
+              session.invalidate();
+          }
+      }
+  }
+  ```
 
 ---
 
-## 5. JDBC & Prepared Statements
+### 4.4 Application Bootstrapping (`AppContextListener.java`)
 
-**What is JDBC?** Java Database Connectivity — the standard Java API for communicating with relational databases.
+[`AppContextListener.java`](../src/main/java/com/attendance/listener/AppContextListener.java) implements `ServletContextListener`. It initializes application-level configurations on container startup before any servlet receives traffic:
+- Sets the default JVM timezone globally to UTC (`TimeZone.setDefault(TimeZone.getTimeZone("UTC"))`).
+- Runs database migration scripts (`CREATE TABLE IF NOT EXISTS`, schema alterations) to ensure cold-start compatibility on cloud platforms like TiDB Cloud or Render.
 
-**Key classes:**
-| Class | Role |
-|---|---|
-| `Connection` | Represents one database connection |
-| `PreparedStatement` | Pre-compiled SQL with `?` placeholders (SQL injection safe) |
-| `ResultSet` | Rows returned by a `SELECT` query |
-| `DataSource` | Pool of `Connection` objects |
+---
 
-**Pattern used in every DAO:**
+## 5. Database Persistence & Concurrency (JDBC)
+
+### 5.1 SQL Injection Prevention via `PreparedStatement`
+
+ScanIn strictly bans string concatenation in SQL queries (`SELECT * FROM users WHERE email = '` + email + `'`). Instead, all SQL queries use parameterized `PreparedStatement` placeholders (`?`):
+
 ```java
-// Safe: PreparedStatement with parameterized placeholders
-String sql = "INSERT INTO attendance (student_id, course_id, qr_session_id, status) VALUES (?, ?, ?, ?)";
+// Vulnerable to SQL injection (NEVER used in ScanIn):
+// "SELECT * FROM users WHERE email = '" + input + "'" -> attacker injects: ' OR '1'='1
 
+// Safe, parameterized execution:
+String sql = "SELECT * FROM users WHERE email = ?";
 try (Connection conn = DBConnection.getInstance().getConnection();
      PreparedStatement ps = conn.prepareStatement(sql)) {
-
-    ps.setInt(1, studentId);    // parameter 1
-    ps.setInt(2, courseId);     // parameter 2
-    ps.setInt(3, sessionId);    // parameter 3
-    ps.setString(4, "PRESENT"); // parameter 4
-
-    ps.executeUpdate();         // execute INSERT
-} catch (SQLException e) {
-    // catch duplicate key (error code 1062) for ACID rollback
+    ps.setString(1, email); // Database engine treats input purely as literal data
+    try (ResultSet rs = ps.executeQuery()) { ... }
 }
 ```
-- **Try-with-resources** (`try (Connection conn = ...)`) ensures the connection is returned to the pool even if an exception occurs — no connection leaks.
 
 ---
 
-## 6. Cryptography — `QrCodeUtil.java`
+### 5.2 Automatic Resource Management (`try-with-resources`)
 
-### 6.1 HMAC-SHA256 Token Generation
+Java 7+ `try-with-resources` ensures that `Connection`, `PreparedStatement`, and `ResultSet` instances are closed automatically—even if an unchecked `RuntimeException` or SQL error occurs. This prevents database connection leaks and pool exhaustion.
 
-**What is HMAC?** Hash-based Message Authentication Code — a cryptographic signature that proves a message was created by someone who knows the secret key, and has not been tampered with.
+---
 
-**Token format:**
-```
-sessionId.courseId.timestampMs.nonce.HMAC-SHA256(payload)
-Example:
-360003.1.1793801716000.274274b4.02522b34f6e9178ddb943a2751619f5fd693f01779c8623970234a6f5543b5cf
-```
+### 5.3 Transaction Demarcation (`commit` & `rollback`)
 
-**Generation code:**
+In workflows modifying multiple related tables—such as manual attendance overrides in `AttendanceManualServlet.java`—the application disables auto-commit to ensure full **ACID Atomicity**:
+
 ```java
-// QrCodeUtil.java
-public static String generateSignedTokenForStep(int sessionId, int courseId, long step) {
-    long stepStartMs = step * ROTATION_INTERVAL_MS;        // 7000ms per step
-    String nonce     = computeHmac(sessionId + ":nonce:" + step).substring(0, 8);
-    String payload   = sessionId + ":" + courseId + ":" + stepStartMs + ":" + nonce;
-    String signature = computeHmac(payload);               // HMAC-SHA256
+Connection conn = DBConnection.getInstance().getConnection();
+try {
+    conn.setAutoCommit(false); // Begin ACID Transaction boundary
+
+    // 1. Update attendance status
+    attendanceDao.updateStatus(conn, attendanceId, newStatus);
+
+    // 2. Insert audit log record
+    auditLogDao.insertRecord(conn, attendanceId, teacherId, oldStatus, newStatus, reason);
+
+    conn.commit(); // Persist changes atomically
+} catch (SQLException e) {
+    conn.rollback(); // Revert all modifications on failure
+    throw e;
+} finally {
+    conn.setAutoCommit(true);
+    conn.close(); // Return connection to pool
+}
+```
+
+---
+
+### 5.4 Handling Database Race Conditions (Error Code 1062)
+
+If a student attempts rapid duplicate scans, an application-level `if (!marked)` check is susceptible to a Time-Of-Check to Time-Of-Use (TOCTOU) race condition.
+
+ScanIn offloads concurrency control to the database using a composite unique constraint:
+```sql
+CONSTRAINT unique_attendance UNIQUE (student_id, qr_session_id)
+```
+
+When two identical requests execute concurrently:
+1. Thread 1 acquires the row lock and inserts successfully.
+2. Thread 2 is immediately rejected by the InnoDB engine with **MySQL Error Code 1062 (Duplicate Key)**.
+3. `AttendanceDao.java` intercepts this error code and returns an `ALREADY_MARKED` status instead of throwing an unhandled exception:
+
+```java
+try {
+    ps.executeUpdate();
+    return AttendanceResult.SUCCESS;
+} catch (SQLException ex) {
+    if (ex.getErrorCode() == 1062) {
+        LOGGER.warn("Duplicate attendance attempt blocked at DB level for student: {}", studentId);
+        return AttendanceResult.ALREADY_MARKED;
+    }
+    throw ex;
+}
+```
+
+---
+
+## 6. Cryptography & Anti-Proxy Security Engine
+
+[`QrCodeUtil.java`](../src/main/java/com/attendance/util/QrCodeUtil.java) handles the cryptographic security pipeline protecting against proxy attendance, screenshot sharing, and token replay attacks.
+
+```
+                  Rotating 7-Second Window Cycle
+               (step = currentTimestamp / 7000ms)
+                               │
+               ┌───────────────┴───────────────┐
+               ▼                               ▼
+       HMAC-SHA256 Token            6-Digit Dynamic OTP
+  [5-Part Cryptographic String]     (RFC 6238 TOTP Truncation)
+  - sessionId                       - 6-digit numeric fallback
+  - courseId                        - For poor camera lenses
+  - stepStartMs                     - Validated against current
+  - 8-char Nonce                      or adjacent (t - 1) step
+  - SHA-256 HMAC Signature
+```
+
+### 6.1 HMAC-SHA256 Cryptographic Token Generation
+
+Each dynamic QR code embeds a signed 5-part token structured as:
+$$\text{token} = \text{sessionId} \,.\, \text{courseId} \,.\, \text{stepStartMs} \,.\, \text{nonce} \,.\, \text{HMAC-SHA256}(\text{payload})$$
+
+```java
+public static String generateRotatingToken(int sessionId, int courseId, long step) {
+    long stepStartMs = step * ROTATION_INTERVAL_MS; // 7000ms per step
+    String nonce = computeHmac(sessionId + ":nonce:" + step).substring(0, 8);
+    String payload = sessionId + ":" + courseId + ":" + stepStartMs + ":" + nonce;
+    String signature = computeHmac(payload);
     return sessionId + "." + courseId + "." + stepStartMs + "." + nonce + "." + signature;
 }
 
 private static String computeHmac(String data) {
-    Mac mac = Mac.getInstance("HmacSHA256");
-    SecretKeySpec key = new SecretKeySpec(SECRET_KEY.getBytes(UTF_8), "HmacSHA256");
-    mac.init(key);
-    byte[] raw = mac.doFinal(data.getBytes(UTF_8));
-    // Convert bytes to hex string
-    StringBuilder sb = new StringBuilder();
-    for (byte b : raw) sb.append(String.format("%02x", b));
-    return sb.toString();
+    try {
+        Mac mac = Mac.getInstance("HmacSHA256");
+        SecretKeySpec keySpec = new SecretKeySpec(SECRET_KEY.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+        mac.init(keySpec);
+        byte[] rawBytes = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
+        return HexFormat.of().formatHex(rawBytes);
+    } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+        throw new SecurityException("Cryptographic failure in HMAC initialization", e);
+    }
 }
 ```
 
-**Verification (constant-time comparison):**
+---
+
+### 6.2 Constant-Time Signature Verification (Anti-Timing Attacks)
+
+Standard `String.equals()` compares characters sequentially and returns `false` on the first mismatched byte. An attacker measuring request response times with high-precision clocks can deduce valid signature bytes one by one (a **timing attack**).
+
+ScanIn uses `MessageDigest.isEqual()` to enforce **constant-time byte comparison**:
+
 ```java
-// MessageDigest.isEqual() does NOT short-circuit — prevents timing attacks
-if (!MessageDigest.isEqual(receivedSig.getBytes(), expectedSig.getBytes())) {
-    return TokenStatus.INVALID;
+// Vulnerable to timing attack:
+// if (receivedSignature.equals(expectedSignature)) ...
+
+// Constant-time comparison: executes in uniform time regardless of mismatch location
+if (!MessageDigest.isEqual(
+        receivedSignature.getBytes(StandardCharsets.UTF_8),
+        expectedSignature.getBytes(StandardCharsets.UTF_8))) {
+    return TokenStatus.INVALID_SIGNATURE;
 }
 ```
-- A **timing attack** works by measuring how fast a comparison returns false — if `String.equals()` returns at the first mismatch, an attacker can guess the signature one character at a time. `MessageDigest.isEqual()` always takes the same time regardless of where the mismatch is.
 
-### 6.2 6-Digit Numeric Fallback (TOTP-style)
+---
+
+### 6.3 6-Digit TOTP Dynamic Truncation (RFC 6238 Fallback)
+
+To accommodate students with damaged camera lenses or low-light conditions, ScanIn computes a dynamic 6-digit one-time PIN (OTP) synchronized with the current 7-second step:
 
 ```java
 public static String computeNumericCode(int sessionId, int courseId, long timestamp) {
-    long step = timestamp / ROTATION_INTERVAL_MS;      // which 7-second slot
+    long step = timestamp / ROTATION_INTERVAL_MS;
     String data = sessionId + ":" + courseId + ":" + step;
     String hmac = computeHmac(data);
-    // Dynamic truncation: take 4 bytes at a dynamic offset
-    int offset  = Integer.parseInt(hmac.substring(hmac.length() - 1), 16);
+
+    // Dynamic Truncation: extract lowest nibble to determine offset (0 to 15)
+    int offset = Integer.parseInt(hmac.substring(hmac.length() - 1), 16);
     String part = hmac.substring(offset * 2, offset * 2 + 8);
-    long binary = Long.parseLong(part, 16) & 0x7fffffffL;
-    int otp     = (int) (binary % 1_000_000L);
-    return String.format("%06d", otp);               // always 6 digits
+    long binary = Long.parseLong(part, 16) & 0x7fffffffL; // Mask to 31-bit integer
+    int otp = (int) (binary % 1_000_000L);               // Constrain to 6 digits
+
+    return String.format("%06d", otp);
 }
 ```
-This is exactly how **TOTP (Time-based One-Time Passwords)** work (RFC 6238) — the same algorithm behind Google Authenticator, adapted here to be course-session-bound.
 
-### 6.3 BCrypt Password Hashing — `PasswordUtil.java`
+---
+
+### 6.4 Adaptive Salting & BCrypt Password Hashing
+
+[`PasswordUtil.java`](../src/main/java/com/attendance/util/PasswordUtil.java) handles password security using BCrypt:
+- **Salt Generation:** Incorporates a 128-bit cryptographically secure random salt into each hash. Two users with identical passwords produce distinct hashes, neutralizing precomputed rainbow table attacks.
+- **Adaptive Work Factor:** Uses a cost factor of `10` ($2^{10} = 1024$ key expansion rounds), balancing fast login times against brute-force resistance.
 
 ```java
-// PasswordUtil.java
 public class PasswordUtil {
-    public static String hash(String plain) {
-        return BCrypt.hashpw(plain, BCrypt.gensalt(10));  // cost factor 10
+    public static String hashPassword(String plainPassword) {
+        return BCrypt.hashpw(plainPassword, BCrypt.gensalt(10));
     }
 
-    public static boolean verify(String plain, String hashed) {
-        return BCrypt.checkpw(plain, hashed);
-    }
-}
-```
-- BCrypt is **adaptive** — the cost factor (10) can be increased as hardware gets faster.
-- BCrypt is **salted** — two users with the same password get different hashes.
-- Stored hashes start with `$2a$10$` — this prefix identifies the algorithm and cost.
-
----
-
-## 7. Generics — `Dao<T>`
-
-**What they are:** Generics allow writing type-safe code that works with different types without casting. `Dao<T>` is a generic interface where `T` is a placeholder for any model class.
-
-```java
-// Without generics — unsafe, requires casting
-List list = userDao.findAll();
-User u = (User) list.get(0);   // ClassCastException risk
-
-// With generics — type-safe
-List<User> users = userDao.findAll();   // compiler enforces the type
-User u = users.get(0);                  // no cast needed, compiler guaranteed
-```
-The compiler rejects an attempt to call `studentDao.save(teacher)` because `StudentDao` implements `Dao<Student>`, not `Dao<Teacher>`.
-
----
-
-## 8. `AppContextListener` — Application Lifecycle
-
-**What is a `ServletContextListener`?** An event listener that is notified when the entire web application starts and stops. Runs before any servlet processes a request.
-
-**How ScanIn uses it:**
-```java
-@WebListener
-public class AppContextListener implements ServletContextListener {
-
-    @Override
-    public void contextInitialized(ServletContextEvent sce) {
-        TimeZone.setDefault(TimeZone.getTimeZone("UTC"));   // set JVM timezone
-        runStartupMigrations();   // create/alter tables if missing
+    public static boolean checkPassword(String plainPassword, String hashedPassword) {
+        if (hashedPassword == null || !hashedPassword.startsWith("$2a$")) {
+            return false;
+        }
+        return BCrypt.checkpw(plainPassword, hashedPassword);
     }
 }
 ```
-`runStartupMigrations()` executes `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE` statements so the database schema is always consistent on cold start — even when deploying to a fresh TiDB Cloud instance. This is what makes deployment to Render "zero-config".
-
-**File:** [`src/main/java/com/attendance/listener/AppContextListener.java`](../src/main/java/com/attendance/listener/AppContextListener.java)
 
 ---
 
-## 9. Exception Handling
+## 7. Modern Java LTS Idioms & Quality Standards
 
-**Key patterns in the project:**
+### 7.1 Null Safety with `Optional<T>`
 
-| Scenario | Handling |
-|---|---|
-| `SQLException` on duplicate key (code 1062) | Caught by `AttendanceDao`, returns `DUPLICATE` outcome instead of crashing |
-| Invalid token format | `QrCodeUtil.validateToken()` returns `TokenStatus.INVALID` — no exception propagated |
-| `NumberFormatException` during token parsing | Caught inside `validateToken()`, returns `INVALID` safely |
-| Connection failure | `DBConnection` pool retries; if exhausted, `getConnection()` throws `SQLException` caught by servlet |
+To eliminate `NullPointerException` errors, all DAO query methods return `Optional<T>` rather than raw, potentially null object references:
 
 ```java
-// Example: AttendanceDao.java — ACID duplicate handling
-try {
-    ps.executeUpdate();   // INSERT into attendance
-    return "SUCCESS";
-} catch (SQLException e) {
-    if (e.getErrorCode() == 1062) {   // MySQL duplicate key
-        return "DUPLICATE";           // already marked — not an error, just rejected
-    }
-    throw e;   // unexpected error — rethrow
-}
+Optional<Student> studentOpt = studentDao.findByRollNumber("CS2026001");
+
+// Functional evaluation:
+studentOpt.ifPresentOrElse(
+    student -> markAttendance(student),
+    () -> logWarning("Student roll number not registered")
+);
 ```
 
 ---
 
-## 10. `Optional<T>` — Null Safety
+### 7.2 Modern Date-Time API (`java.time.*`) & Centralized UTC/IST Engine
 
-All DAO `findById()` and `findByX()` methods return `Optional<T>` instead of `null`. This forces callers to handle the "not found" case explicitly:
+Legacy date classes (`java.util.Date`, `SimpleDateFormat`) are mutable and not thread-safe. ScanIn uses the modern Java 8+ `java.time` package:
 
-```java
-Optional<Student> opt = studentDao.findByUserId(userId);
-
-// Caller must acknowledge that the student might not exist
-if (opt.isPresent()) {
-    Student s = opt.get();
-    // use s
-} else {
-    response.sendError(404, "Student not found");
-}
 ```
-Returning `null` from a method and forgetting to check is the #1 source of `NullPointerException` in Java. `Optional` makes the possibility visible in the type system.
+[Database / Storage Layer]  ──► Canonical UTC (ZoneOffset.UTC)
+                                         │
+                                         ▼
+[DateTimeUtil Conversion]    ──► ZonedDateTime.withZoneSameInstant(Asia/Kolkata)
+                                         │
+                                         ▼
+[UI / Presentation Layer]    ──► Formatted IST String ("dd MMM yyyy, hh:mm a")
+```
 
----
-
-## 11. Modern Date & Time API (`java.time.*`) & Centralized Timezone Strategy
-
-**The Problem:** Traditional Java date handling (`java.util.Date`, `java.text.SimpleDateFormat`) is mutable, error-prone, and not thread-safe. Furthermore, cloud databases (like TiDB Cloud / AWS) operate in UTC (`+00:00`), while students and faculty in India operate in Indian Standard Time (IST — `Asia/Kolkata`, UTC+05:30). If raw UTC timestamps are displayed, records appear 5 hours and 30 minutes behind local wall-clock time (e.g. 09:41 AM instead of 03:11 PM).
-
-**The Solution:** ScanIn enforces a strict architectural boundary via `DateTimeUtil.java`:
-1. **Database & Storage Layer:** Canonical UTC (`+00:00`) for consistency and multi-system portability.
-2. **Presentation Layer:** All views format through `DateTimeUtil.formatToIst()`, converting UTC into `Asia/Kolkata` time using immutable `ZonedDateTime`.
+[`DateTimeUtil.java`](../src/main/java/com/attendance/util/DateTimeUtil.java) converts database UTC timestamps to Indian Standard Time (IST) for presentation:
 
 ```java
-// DateTimeUtil.java
 public final class DateTimeUtil {
     public static final ZoneId UTC_ZONE = ZoneOffset.UTC;
     public static final ZoneId IST_ZONE = ZoneId.of("Asia/Kolkata");
-    public static final DateTimeFormatter IST_DISPLAY_FORMATTER =
+    public static final DateTimeFormatter IST_FORMATTER =
             DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a", Locale.ENGLISH);
 
-    // Converts UTC LocalDateTime to Asia/Kolkata ZonedDateTime
     public static ZonedDateTime toIst(LocalDateTime utcDateTime) {
         if (utcDateTime == null) return null;
         return utcDateTime.atZone(UTC_ZONE).withZoneSameInstant(IST_ZONE);
     }
 
-    // Formats into clean academic UI string: "09 Nov 2026, 03:11 PM"
     public static String formatToIst(LocalDateTime utcDateTime) {
         if (utcDateTime == null) return "N/A";
-        return toIst(utcDateTime).format(IST_DISPLAY_FORMATTER);
+        return toIst(utcDateTime).format(IST_FORMATTER);
     }
 }
 ```
-
-**Why this is better than manual addition (`plusHours(5).plusMinutes(30)`):**
-- `ZonedDateTime.withZoneSameInstant()` handles daylight changes, epoch instant integrity, and calendar date boundary crossovers automatically (e.g., when 23:00 UTC crosses over to 04:30 next morning).
-- Immutable and 100% thread-safe — multiple servlets and JSPs can format dates concurrently without synchronization locks.
-
-**File:** [`src/main/java/com/attendance/util/DateTimeUtil.java`](../src/main/java/com/attendance/util/DateTimeUtil.java)
+`ZonedDateTime.withZoneSameInstant()` correctly handles midnight day boundary crossovers (e.g. `23:30 UTC` $\rightarrow$ `05:00 IST next day`), ensuring calendar accuracy.
 
 ---
 
-## 12. Course Scheduling & Lifecycle State Pattern
+### 7.3 Type-Safe Generics & Collections Framework
 
-**What it is:** Managing planned academic timetables requires tracking lecture states from **Planned/Scheduled** $\rightarrow$ **Active Live QR** $\rightarrow$ **Conducted / Retired**.
+Generic type parameters prevent runtime `ClassCastException` errors by enforcing type constraints at compile time:
 
 ```java
-// CourseSchedule.java
-public class CourseSchedule {
-    private int id;
-    private int courseId;
-    private String dayOfWeek;     // "Monday"
-    private Time startTime;       // 15:00:00
-    private Time endTime;         // 16:00:00
-    private String room;          // "ANEW202"
-    private boolean conducted;    // true once attendance is closed
+// Type-safe generic method
+public <T extends User> List<T> filterByDepartment(List<T> users, String dept) {
+    return users.stream()
+                .filter(u -> dept.equalsIgnoreCase(u.getRoleInfo()))
+                .collect(Collectors.toList());
 }
 ```
 
-**How it works in practice:**
-1. **Creation:** Faculty creates timeslots under "Planned Lecture Schedule".
-2. **Execution:** Faculty clicks **"Start Now"**; the system creates a `QrSession` with `schedule_id = cs.id`.
-3. **Closure & Retirement:** When faculty clicks **"End Session & Mark Absentees"**, `QrSessionDao.closeSession()` marks absentees AND calls `CourseScheduleDao.markAsConducted(scheduleId)`.
-4. **Historical Report Preservation:** The schedule row is never hard-deleted; it is excluded from upcoming planned lists on the dashboard, but `LEFT JOIN course_schedules cs ON qs.schedule_id = cs.id` in `AttendanceDao` retains the timeslot metadata in reports indefinitely.
+---
 
-**Files:**
-- [`src/main/java/com/attendance/model/CourseSchedule.java`](../src/main/java/com/attendance/model/CourseSchedule.java)
-- [`src/main/java/com/attendance/dao/CourseScheduleDao.java`](../src/main/java/com/attendance/dao/CourseScheduleDao.java)
+### 7.4 Thread-Safety & Multi-Threading Model
+
+Tomcat services concurrent requests using a thread pool. ScanIn maintains thread safety across all layers:
+1. **Stateless Servlets:** Servlets hold no mutable state across requests.
+2. **Immutable Utilities:** `DateTimeUtil` and `QrCodeUtil` operate purely on local function variables.
+3. **Synchronized Singleton Pool:** `DBConnection.getInstance()` synchronizes initialization to guarantee a single pool instance across concurrent threads.
+4. **Thread-Safe Cryptography:** `Mac` instances are allocated fresh per operation within `computeHmac()` to prevent race conditions during concurrent HMAC calculations.
 
 ---
 
-## 13. Summary Map: Concept → File
+## 8. Summary Mapping (Concepts → Source Files)
 
-| Concept | Primary File(s) |
-|---|---|
-| Abstract class (Abstraction) | [`User.java`](../src/main/java/com/attendance/model/User.java) |
-| Inheritance | [`Teacher.java`](../src/main/java/com/attendance/model/Teacher.java), [`Student.java`](../src/main/java/com/attendance/model/Student.java) |
-| Polymorphism | [`LoginServlet.java`](../src/main/java/com/attendance/servlet/LoginServlet.java) |
-| Encapsulation | All model classes |
-| Interface | [`Dao.java`](../src/main/java/com/attendance/dao/Dao.java), [`Attendable.java`](../src/main/java/com/attendance/model/Attendable.java) |
-| Singleton pattern | [`DBConnection.java`](../src/main/java/com/attendance/util/DBConnection.java) |
-| DAO pattern | [`AttendanceDao.java`](../src/main/java/com/attendance/dao/AttendanceDao.java), [`QrSessionDao.java`](../src/main/java/com/attendance/dao/QrSessionDao.java), [`CourseScheduleDao.java`](../src/main/java/com/attendance/dao/CourseScheduleDao.java) |
-| Servlet lifecycle | [`QrGenerateServlet.java`](../src/main/java/com/attendance/servlet/QrGenerateServlet.java), [`QrScanServlet.java`](../src/main/java/com/attendance/servlet/QrScanServlet.java), [`ReportServlet.java`](../src/main/java/com/attendance/servlet/ReportServlet.java) |
-| Filter / RBAC | [`SecurityFilter.java`](../src/main/java/com/attendance/filter/SecurityFilter.java) |
-| Session management | [`SessionUtil.java`](../src/main/java/com/attendance/util/SessionUtil.java) |
-| JDBC & PreparedStatement | All DAO classes |
-| HMAC-SHA256 cryptography | [`QrCodeUtil.java`](../src/main/java/com/attendance/util/QrCodeUtil.java) |
-| BCrypt hashing | [`PasswordUtil.java`](../src/main/java/com/attendance/util/PasswordUtil.java) |
-| Modern Date/Time & Timezones | [`DateTimeUtil.java`](../src/main/java/com/attendance/util/DateTimeUtil.java) |
-| Generics | [`Dao.java`](../src/main/java/com/attendance/dao/Dao.java) |
-| App lifecycle listener | [`AppContextListener.java`](../src/main/java/com/attendance/listener/AppContextListener.java) |
-| Optional / null safety | All DAO findById methods |
+| Concept / Pattern | Source Code Location |
+| :--- | :--- |
+| **Abstract Class & Template Methods** | [`src/main/java/com/attendance/model/User.java`](../src/main/java/com/attendance/model/User.java) |
+| **Inheritance Specialization** | [`src/main/java/com/attendance/model/Teacher.java`](../src/main/java/com/attendance/model/Teacher.java)<br>[`src/main/java/com/attendance/model/Student.java`](../src/main/java/com/attendance/model/Student.java) |
+| **Polymorphic Dispatch** | [`src/main/java/com/attendance/servlet/LoginServlet.java`](../src/main/java/com/attendance/servlet/LoginServlet.java) |
+| **Encapsulation & Access Control** | All models in `com.attendance.model.*` |
+| **Generic DAO Interface** | [`src/main/java/com/attendance/dao/Dao.java`](../src/main/java/com/attendance/dao/Dao.java) |
+| **Capability Interface** | [`src/main/java/com/attendance/model/Attendable.java`](../src/main/java/com/attendance/model/Attendable.java) |
+| **Singleton Connection Pool** | [`src/main/java/com/attendance/util/DBConnection.java`](../src/main/java/com/attendance/util/DBConnection.java) |
+| **Model-View-Controller (MVC)** | `servlet/*` (Controller) $\leftrightarrow$ `model/*` (Model) $\leftrightarrow$ `webapp/WEB-INF/views/*` (View) |
+| **Filter & RBAC Interception** | [`src/main/java/com/attendance/filter/SecurityFilter.java`](../src/main/java/com/attendance/filter/SecurityFilter.java) |
+| **Stateful Session Wrapper** | [`src/main/java/com/attendance/util/SessionUtil.java`](../src/main/java/com/attendance/util/SessionUtil.java) |
+| **Application Lifecycle Listener** | [`src/main/java/com/attendance/listener/AppContextListener.java`](../src/main/java/com/attendance/listener/AppContextListener.java) |
+| **HMAC-SHA256 & TOTP Crypto** | [`src/main/java/com/attendance/util/QrCodeUtil.java`](../src/main/java/com/attendance/util/QrCodeUtil.java) |
+| **Constant-Time Verification** | [`src/main/java/com/attendance/util/QrCodeUtil.java`](../src/main/java/com/attendance/util/QrCodeUtil.java) |
+| **Adaptive Password Hashing** | [`src/main/java/com/attendance/util/PasswordUtil.java`](../src/main/java/com/attendance/util/PasswordUtil.java) |
+| **Modern Date/Time & Timezone Engine** | [`src/main/java/com/attendance/util/DateTimeUtil.java`](../src/main/java/com/attendance/util/DateTimeUtil.java) |
+| **ACID Transaction Management** | [`src/main/java/com/attendance/servlet/AttendanceManualServlet.java`](../src/main/java/com/attendance/servlet/AttendanceManualServlet.java) |
+| **DB Concurrency (Code 1062)** | [`src/main/java/com/attendance/dao/AttendanceDao.java`](../src/main/java/com/attendance/dao/AttendanceDao.java) |
+
+---
+
+## 9. Viva Defense / Interview Questions & Master Answers
+
+### Q1: "Why did you use an abstract class for `User` instead of an interface?"
+> **Master Answer:**  
+> *"An abstract class was chosen because `Teacher` and `Student` share state (common fields like `id`, `name`, `email`, `password_hash`, `phone`, and `created_at`). An interface cannot hold mutable instance state or shared constructors. By using an abstract class `User`, we enforce code reuse for shared fields while keeping `getDashboardPath()` and `getRoleInfo()` abstract, requiring each role subclass to provide its own behavior."*
+
+---
+
+### Q2: "How does polymorphism simplify request handling in `LoginServlet`?"
+> **Master Answer:**  
+> *"When a user logs in, `userDao.findByEmail()` returns a `User` reference. We call `user.getDashboardPath()`, and the JVM dynamically invokes `Teacher.getDashboardPath()` (`/teacher/dashboard`) or `Student.getDashboardPath()` (`/student/dashboard`) via virtual method dispatch. This eliminates role-checking `if-else` blocks and allows new roles to be added without modifying the servlet."*
+
+---
+
+### Q3: "Why is the Singleton pattern in `DBConnection` declared with `synchronized`?"
+> **Master Answer:**  
+> *"Without synchronization, two concurrent HTTP worker threads could both find `instance == null` simultaneously and create two separate connection pool managers, wasting database connections and memory. Adding `synchronized` to `getInstance()` guarantees that only one thread can initialize the pool, preventing race conditions on startup."*
+
+---
+
+### Q4: "How does `SecurityFilter` protect against unauthorized URL access?"
+> **Master Answer:**  
+> *"The filter implements `jakarta.servlet.Filter` and intercepts every incoming HTTP request (`/*`). It verifies whether an active `HttpSession` exists and inspects the user's role. If a student attempts to access `/teacher/dashboard`, the filter intercepts the request and issues an HTTP 403 Forbidden error before it ever reaches the servlet."*
+
+---
+
+### Q5: "How does your code prevent SQL injection?"
+> **Master Answer:**  
+> *"Every database interaction uses `PreparedStatement` with parameterized placeholders (`?`). The database driver sends the query text and parameter values separately; inputs are never parsed as executable SQL commands, neutralizing SQL injection attempts entirely."*
+
+---
+
+### Q6: "Why use `MessageDigest.isEqual()` instead of `String.equals()` for token verification?"
+> **Master Answer:**  
+> *"`String.equals()` compares characters one by one and returns `false` as soon as it finds a mismatch, meaning comparison time varies depending on how many characters match. An attacker can measure these small timing differences to guess signature bytes incrementally. `MessageDigest.isEqual()` executes in constant time across the entire byte array, eliminating timing attack vulnerabilities."*
+
+---
+
+### Q7: "How does the system handle concurrent attendance scans from the same student?"
+> **Master Answer:**  
+> *"We handle concurrency using a database composite unique constraint: `UNIQUE(student_id, qr_session_id)`. If two identical requests hit the server at the same millisecond, the database engine accepts the first insert and rejects the second with MySQL Error Code 1062 (Duplicate Key). Our `AttendanceDao` catches this specific error code and returns an `ALREADY_MARKED` status code, preventing duplicate entries without race conditions."*
