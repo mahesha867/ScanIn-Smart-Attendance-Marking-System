@@ -4,72 +4,326 @@ This document explains every core Database Management System concept used in the
 
 ---
 
-## 1. Relational Database Model
+## 1. Relational Database Model & Database Design
 
 ScanIn uses **MySQL 8.0 / TiDB Cloud** (MySQL 8.0 protocol-compatible), a Relational Database Management System (RDBMS).
 
 **Core idea:** Data is organised in **tables** (relations). Each table has a fixed set of columns (attributes), and rows (tuples) represent individual records. Relationships between tables are expressed through **foreign keys**.
 
-**Database:** `attendance_db`  
-**Schema file:** [`database/schema.sql`](../database/schema.sql)
+* **Database Name:** `attendance_db`
+* **Storage Engine:** MySQL InnoDB (ACID compliant, row-level locking, foreign key enforcement)
+* **Character Set & Collation:** `utf8mb4` with `utf8mb4_unicode_ci` (full multilingual and emoji support)
+* **Timezone Governance:** Canonical UTC (`+00:00`) for storage; presentation dynamically converts to Indian Standard Time (`Asia/Kolkata`, UTC+05:30)
+* **Connection Pooling:** Apache Tomcat JDBC Pool (`maxActive=20`, `testOnBorrow=true`, `validationQuery="SELECT 1"`)
+* **Schema Definition File:** [`database/schema.sql`](../database/schema.sql)
+
+### 1.1 Database Architecture & Relational Topology
+
+The database architecture is structured into 3 distinct functional tiers:
+1. **Identity & Specialization Tier:** The parent `users` entity specialized into `teachers` and `students` via 1:1 foreign key relationships.
+2. **Academic Catalogue & Timetable Tier:** Courses, student registrations (`enrollments`), and weekly timetable slots (`course_schedules`).
+3. **Dynamic Attendance & Security Tier:** Live rotating meetings (`qr_sessions`), scan fraud evidence logs (`scan_attempts`), persistent attendance records (`attendance`), and an append-only audit trail (`attendance_audit_log`).
+
+```mermaid
+flowchart LR
+    subgraph TIER1["1. Identity & Profiles (1:1 Specialization)"]
+        U[("users<br>(Base Authentication)")]
+        T[("teachers<br>(Faculty Profile)")]
+        S[("students<br>(Student Profile)")]
+        U -->|1:1 user_id| T
+        U -->|1:1 user_id| S
+    end
+
+    subgraph TIER2["2. Academics & Timetables"]
+        C[("courses<br>(Curriculum)")]
+        E[("enrollments<br>(Junction M:N)")]
+        CS[("course_schedules<br>(Weekly Lecture Slots)")]
+        T -->|1:N teacher_id| C
+        S -->|M:N student_id| E
+        C -->|M:N course_id| E
+        C -->|1:N course_id| CS
+    end
+
+    subgraph TIER3["3. Attendance Lifecycle & Audit Defense"]
+        QS[("qr_sessions<br>(Live Class Meetings)")]
+        A[("attendance<br>(ACID Scan Logs)")]
+        SA[("scan_attempts<br>(Rate-Limiting & Anti-Replay)")]
+        LOG[("attendance_audit_log<br>(Immutable Override Trail)")]
+
+        C -->|1:N course_id| QS
+        T -->|1:N teacher_id| QS
+        CS -.->|1:N schedule_id| QS
+        QS -->|1:N qr_session_id| A
+        S -->|1:N student_id| A
+        C -->|1:N course_id| A
+        S -->|1:N student_id| SA
+        QS -->|1:N session_id| SA
+        A -->|1:N attendance_id| LOG
+        U -.->|1:N actor_id| LOG
+    end
+```
 
 ---
 
-## 2. Schema Design & Tables
+## 2. Table Design & Data Dictionary
 
-The database has **10 tables**, each with a clearly defined responsibility:
+The database consists of **10 normalized tables**, engineered with explicit data types, primary keys, cascading foreign keys, domain constraints, and indexing.
 
-| Table | Real-world entity | Rows in demo |
-|---|---|---|
-| `users` | Base identity record for all actors | 7 (2 teachers + 5 students) |
-| `teachers` | Faculty profile extending `users` | 2 |
-| `students` | Student profile extending `users` | 5 |
-| `courses` | Course catalogue | 3 (CS501, CS502, IT501) |
-| `enrollments` | Student ↔ Course membership | 8 |
-| `course_schedules` | Planned semester lecture timeslots | Created per course schedule |
-| `qr_sessions` | A single live attendance class session | Created per session launch |
-| `attendance` | One attendance record per student per session | Created when student scans |
-| `attendance_audit_log` | Permanent log of every manual status change | Created on each override |
-| `scan_attempts` | Log of every scan attempt (success or failure) | Created on each scan |
+### Table 1: `users` (Base Identity)
+Base authentication and profile table implementing object-oriented abstraction.
+| Column | Data Type | Nullable | Default | Constraints | Description |
+|---|---|:---:|---|---|---|
+| `id` | `INT` | NO | Auto Increment | **PRIMARY KEY** | Unique surrogate ID |
+| `name` | `VARCHAR(100)` | NO | None | None | Full legal user name |
+| `email` | `VARCHAR(150)` | NO | None | **UNIQUE** | Unique institutional login email |
+| `password` | `VARCHAR(255)` | NO | None | None | BCrypt salted hash (`$2a$10$...`) |
+| `role` | `ENUM` | NO | None | `'TEACHER','STUDENT'` | Role-based authorization type |
+| `phone` | `VARCHAR(20)` | YES | NULL | None | Contact telephone number |
+| `created_at`| `TIMESTAMP` | NO | `CURRENT_TIMESTAMP` | None | Account creation timestamp |
+| `updated_at`| `TIMESTAMP` | NO | `CURRENT_TIMESTAMP` | `ON UPDATE CURRENT_TIMESTAMP` | Last profile update timestamp |
+
+### Table 2: `teachers` (Faculty Specialization)
+Extends `users` with faculty-specific employee attributes.
+| Column | Data Type | Nullable | Default | Constraints | Description |
+|---|---|:---:|---|---|---|
+| `teacher_id` | `INT` | NO | Auto Increment | **PRIMARY KEY** | Surrogate teacher ID |
+| `user_id` | `INT` | NO | None | **UNIQUE**, **FK** $\rightarrow$ `users(id)` | 1:1 link to base user record |
+| `employee_id`| `VARCHAR(20)` | NO | None | **UNIQUE** | Institutional faculty ID (e.g. `EMP001`) |
+| `department` | `VARCHAR(100)` | YES | NULL | None | Academic department (e.g. `Computer Science`) |
+
+### Table 3: `students` (Student Specialization)
+Extends `users` with academic enrollment attributes.
+| Column | Data Type | Nullable | Default | Constraints | Description |
+|---|---|:---:|---|---|---|
+| `student_id` | `INT` | NO | Auto Increment | **PRIMARY KEY** | Surrogate student ID |
+| `user_id` | `INT` | NO | None | **UNIQUE**, **FK** $\rightarrow$ `users(id)` | 1:1 link to base user record |
+| `roll_number` | `VARCHAR(20)` | NO | None | **UNIQUE** | Official university roll (e.g. `CS2021001`) |
+| `department` | `VARCHAR(100)` | YES | NULL | None | Department of study |
+| `semester` | `INT` | YES | NULL | None | Current semester number (1 to 8) |
+
+### Table 4: `courses` (Curriculum Catalogue)
+Academic courses taught by faculty.
+| Column | Data Type | Nullable | Default | Constraints | Description |
+|---|---|:---:|---|---|---|
+| `id` | `INT` | NO | Auto Increment | **PRIMARY KEY** | Unique surrogate course ID |
+| `course_code` | `VARCHAR(20)` | NO | None | **UNIQUE** | Subject code (e.g. `CS501`, `CS23332`) |
+| `course_name` | `VARCHAR(150)` | NO | None | None | Descriptive course title |
+| `teacher_id` | `INT` | NO | None | **FK** $\rightarrow$ `teachers(teacher_id)` | Faculty member owning the course |
+| `semester` | `INT` | YES | NULL | None | Target curriculum semester |
+| `department` | `VARCHAR(100)` | YES | NULL | None | Offering academic department |
+| `created_at` | `TIMESTAMP` | NO | `CURRENT_TIMESTAMP` | None | Course creation date |
+
+### Table 5: `enrollments` (Student-Course Association)
+Junction table resolving the Many-to-Many ($M:N$) relationship between `students` and `courses`.
+| Column | Data Type | Nullable | Default | Constraints | Description |
+|---|---|:---:|---|---|---|
+| `id` | `INT` | NO | Auto Increment | **PRIMARY KEY** | Surrogate enrollment ID |
+| `student_id` | `INT` | NO | None | **FK** $\rightarrow$ `students(student_id)` | Enrolled student reference |
+| `course_id` | `INT` | NO | None | **FK** $\rightarrow$ `courses(id)` | Registered course reference |
+| `enrolled_at` | `TIMESTAMP` | NO | `CURRENT_TIMESTAMP` | None | Timestamp when student joined |
+| — | — | — | — | **UNIQUE(`student_id`, `course_id`)** | Prevents duplicate student registrations |
+
+### Table 6: `course_schedules` (Weekly Timetable & Planned Sessions)
+Defines planned weekly lecture timeslots for courses with state lifecycle tracking.
+| Column | Data Type | Nullable | Default | Constraints | Description |
+|---|---|:---:|---|---|---|
+| `id` | `INT` | NO | Auto Increment | **PRIMARY KEY** | Unique timeslot schedule ID |
+| `course_id` | `INT` | NO | None | **FK** $\rightarrow$ `courses(id)` | Course this lecture belongs to |
+| `day_of_week` | `VARCHAR(15)` | NO | None | None | Day of lecture (e.g. `'Monday'`) |
+| `start_time` | `TIME` | NO | None | None | Scheduled start time (e.g. `15:00:00`) |
+| `end_time` | `TIME` | NO | None | None | Scheduled end time (e.g. `16:00:00`) |
+| `room` | `VARCHAR(50)` | YES | NULL | None | Assigned lecture hall (e.g. `'ANEW202'`) |
+| `is_conducted`| `BOOLEAN` | NO | `FALSE` | None | Lifecycle flag: retired from planned dashboard |
+| `created_at` | `TIMESTAMP` | NO | `CURRENT_TIMESTAMP` | **INDEX**(`course_id`) | Schedule creation timestamp |
+
+### Table 7: `qr_sessions` (Live Dynamic QR Class Meetings)
+Represents a physical class session during which attendance is dynamically captured.
+| Column | Data Type | Nullable | Default | Constraints | Description |
+|---|---|:---:|---|---|---|
+| `id` | `INT` | NO | Auto Increment | **PRIMARY KEY** | Session ID (e.g. `#SES-570001`) |
+| `session_token`| `VARCHAR(255)`| NO | None | **UNIQUE** | Active rotating cryptographic token |
+| `course_id` | `INT` | NO | None | **FK** $\rightarrow$ `courses(id)` | Associated course ID |
+| `teacher_id` | `INT` | NO | None | **FK** $\rightarrow$ `teachers(teacher_id)` | Faculty host ID |
+| `schedule_id` | `INT` | YES | NULL | **FK** $\rightarrow$ `course_schedules(id)` | Bound timetable lecture slot (SET NULL) |
+| `expires_at` | `TIMESTAMP` | NO | None | None | Overall meeting expiration timestamp |
+| `closed_at` | `TIMESTAMP` | YES | NULL | None | Timestamp when session was finalized |
+| `created_at` | `TIMESTAMP` | NO | `CURRENT_TIMESTAMP` | None | Meeting launch timestamp |
+| `is_active` | `BOOLEAN` | NO | `TRUE` | None | Session state (TRUE = open, FALSE = closed) |
+
+### Table 8: `attendance` (ACID Attendance Records)
+Stores validated attendance records marked during live QR sessions or manual overrides.
+| Column | Data Type | Nullable | Default | Constraints | Description |
+|---|---|:---:|---|---|---|
+| `id` | `INT` | NO | Auto Increment | **PRIMARY KEY** | Unique attendance entry ID |
+| `student_id` | `INT` | NO | None | **FK** $\rightarrow$ `students(student_id)` | Attending student ID |
+| `course_id` | `INT` | NO | None | **FK** $\rightarrow$ `courses(id)` | Subject reference for analytics |
+| `qr_session_id`| `INT` | NO | None | **FK** $\rightarrow$ `qr_sessions(id)` | Class session meeting reference |
+| `marked_at` | `TIMESTAMP` | NO | `CURRENT_TIMESTAMP` | None | UTC verification timestamp |
+| `status` | `ENUM` | NO | `'PRESENT'` | `'PRESENT','ABSENT','LATE','OD','EXCUSED'` | Verified attendance status |
+| — | — | — | — | **UNIQUE(`student_id`, `qr_session_id`)** | **Core ACID Constraint (Code 1062 duplicate catch)** |
+
+### Table 9: `scan_attempts` (Security, Fraud Evidence & Rate Limiting)
+High-throughput audit log recording every cryptographic scan attempt.
+| Column | Data Type | Nullable | Default | Constraints | Description |
+|---|---|:---:|---|---|---|
+| `id` | `INT` | NO | Auto Increment | **PRIMARY KEY** | Scan audit attempt ID |
+| `session_id` | `INT` | YES | NULL | None | Target session ID |
+| `student_id` | `INT` | YES | NULL | None | Scanning student ID |
+| `token_hash` | `VARCHAR(64)` | NO | None | **INDEX**(`token_hash`) | SHA-256 hash of token (anti-replay lookup) |
+| `outcome` | `VARCHAR(50)` | NO | None | None | `'SUCCESS'`,`'EXPIRED'`,`'REPLAYED'`, etc. |
+| `attempted_at`| `TIMESTAMP` | NO | `CURRENT_TIMESTAMP` | **INDEX**(`student_id`, `session_id`) | Sliding-window rate limit timestamp |
+
+### Table 10: `attendance_audit_log` (Immutable Change History)
+Append-only ledger recording all manual attendance modifications.
+| Column | Data Type | Nullable | Default | Constraints | Description |
+|---|---|:---:|---|---|---|
+| `id` | `INT` | NO | Auto Increment | **PRIMARY KEY** | Unique audit log ID |
+| `attendance_id`| `INT` | YES | NULL | None | Modified attendance row ID |
+| `student_id` | `INT` | NO | None | **INDEX**(`student_id`) | Affected student ID |
+| `session_id` | `INT` | YES | NULL | **INDEX**(`session_id`) | Affected meeting session ID |
+| `changed_by_user_id`| `INT` | NO | None | **FK** $\rightarrow$ `users(id)` | User ID of faculty member making override |
+| `old_status` | `VARCHAR(20)` | YES | NULL | None | Previous attendance state |
+| `new_status` | `VARCHAR(20)` | NO | None | None | New attendance state (`OD`, `PRESENT`, etc.) |
+| `reason` | `TEXT` | NO | None | None | Mandatory administrative justification text |
+| `created_at` | `TIMESTAMP` | NO | `CURRENT_TIMESTAMP` | None | Immutable tamper-evident timestamp |
 
 ---
 
-## 3. Entity-Relationship (ER) Model
+## 3. Entity-Relationship (ER) Model & Visual ER Diagram
 
-### 3.1 Entities and Attributes
+The ScanIn relational schema models the academic domain with strict cardinality, referential integrity, and composite uniqueness rules.
 
-An **entity** is a real-world object; an **attribute** is a property of that entity.
+```mermaid
+erDiagram
+    USERS ||--o| TEACHERS : "specializes to (1:1)"
+    USERS ||--o| STUDENTS : "specializes to (1:1)"
+    TEACHERS ||--o{ COURSES : "instructs (1:N)"
+    COURSES ||--o{ ENROLLMENTS : "contains (1:N)"
+    STUDENTS ||--o{ ENROLLMENTS : "registers (1:N)"
+    COURSES ||--o{ COURSE_SCHEDULES : "schedules (1:N)"
+    COURSES ||--o{ QR_SESSIONS : "hosts (1:N)"
+    TEACHERS ||--o{ QR_SESSIONS : "generates (1:N)"
+    COURSE_SCHEDULES ||--o{ QR_SESSIONS : "executes (1:N)"
+    QR_SESSIONS ||--o{ ATTENDANCE : "records (1:N)"
+    STUDENTS ||--o{ ATTENDANCE : "marks (1:N)"
+    COURSES ||--o{ ATTENDANCE : "tracks (1:N)"
+    ATTENDANCE ||--o{ ATTENDANCE_AUDIT_LOG : "audited by (1:N)"
+    USERS ||--o{ ATTENDANCE_AUDIT_LOG : "modified by (1:N)"
+    STUDENTS ||--o{ SCAN_ATTEMPTS : "submits (1:N)"
+    QR_SESSIONS ||--o{ SCAN_ATTEMPTS : "targeted in (1:N)"
 
-| Entity | Key Attributes |
-|---|---|
-| User | `id` (PK), `name`, `email` (UNIQUE), `password` (BCrypt), `role` |
-| Student | `student_id` (PK), `user_id` (FK), `roll_number` (UNIQUE), `semester` |
-| Teacher | `teacher_id` (PK), `user_id` (FK), `employee_id` (UNIQUE) |
-| Course | `id` (PK), `course_code` (UNIQUE), `course_name`, `teacher_id` (FK) |
-| CourseSchedule | `id` (PK), `course_id` (FK), `day_of_week`, `start_time`, `end_time`, `room`, `is_conducted` |
-| QrSession | `id` (PK), `course_id` (FK), `teacher_id` (FK), `schedule_id` (FK), `session_token` (UNIQUE), `is_active`, `expires_at` |
-| Attendance | `id` (PK), `student_id` (FK), `qr_session_id` (FK), `status`, `marked_at` |
+    USERS {
+        int id PK
+        varchar name
+        varchar email UK
+        varchar password
+        enum role
+        varchar phone
+        timestamp created_at
+        timestamp updated_at
+    }
 
-### 3.2 Relationships and Cardinality
+    TEACHERS {
+        int teacher_id PK
+        int user_id FK
+        varchar employee_id UK
+        varchar department
+    }
 
-| Relationship | Cardinality | Tables |
-|---|---|---|
-| User has a profile | One-to-One (1:1) | `users` → `teachers` or `students` |
-| Teacher instructs Courses | One-to-Many (1:N) | `teachers` → `courses` |
-| Student enrolls in Courses | Many-to-Many (M:N) | `students` ↔ `courses` via `enrollments` |
-| Course has Planned Timetables | One-to-Many (1:N) | `courses` → `course_schedules` |
-| Planned Timetable links to Live QR Session | One-to-Many (1:N) | `course_schedules` → `qr_sessions` (`schedule_id`) |
-| Course has Sessions | One-to-Many (1:N) | `courses` → `qr_sessions` |
-| Session records Attendance | One-to-Many (1:N) | `qr_sessions` → `attendance` |
-| Attendance has Audit Entries | One-to-Many (1:N) | `attendance` → `attendance_audit_log` |
+    STUDENTS {
+        int student_id PK
+        int user_id FK
+        varchar roll_number UK
+        varchar department
+        int semester
+    }
 
-**Many-to-Many resolved through junction table:**
+    COURSES {
+        int id PK
+        varchar course_code UK
+        varchar course_name
+        int teacher_id FK
+        int semester
+        varchar department
+        timestamp created_at
+    }
+
+    ENROLLMENTS {
+        int id PK
+        int student_id FK
+        int course_id FK
+        timestamp enrolled_at
+    }
+
+    COURSE_SCHEDULES {
+        int id PK
+        int course_id FK
+        varchar day_of_week
+        time start_time
+        time end_time
+        varchar room
+        boolean is_conducted
+        timestamp created_at
+    }
+
+    QR_SESSIONS {
+        int id PK
+        varchar session_token UK
+        int course_id FK
+        int teacher_id FK
+        int schedule_id FK
+        timestamp expires_at
+        timestamp closed_at
+        timestamp created_at
+        boolean is_active
+    }
+
+    ATTENDANCE {
+        int id PK
+        int student_id FK
+        int course_id FK
+        int qr_session_id FK
+        timestamp marked_at
+        enum status
+    }
+
+    SCAN_ATTEMPTS {
+        int id PK
+        int session_id FK
+        int student_id FK
+        varchar token_hash
+        varchar outcome
+        timestamp attempted_at
+    }
+
+    ATTENDANCE_AUDIT_LOG {
+        int id PK
+        int attendance_id FK
+        int student_id FK
+        int session_id FK
+        int changed_by_user_id FK
+        varchar old_status
+        varchar new_status
+        text reason
+        timestamp created_at
+    }
 ```
-students ───┐
-            ├──── enrollments (student_id, course_id) ────┐
-courses ────┘                                              │── actual enrolment
-```
-`enrollments` is the **junction table** (also called bridge/associative table). It decomposes the M:N relationship into two 1:N relationships.
+
+### 3.1 ER Mapping Rules & Cardinality Analysis
+
+| Relationship | Cardinality | Parent Table | Child Table | Foreign Key & Referential Action | Description |
+|---|:---:|---|---|---|---|
+| User Specialization | **1:1** | `users` | `teachers` | `user_id` $\rightarrow$ `users(id)` `ON DELETE CASCADE` | Each faculty member has exactly one base user identity. |
+| User Specialization | **1:1** | `users` | `students` | `user_id` $\rightarrow$ `users(id)` `ON DELETE CASCADE` | Each student has exactly one base user identity. |
+| Faculty Course Ownership | **1:N** | `teachers` | `courses` | `teacher_id` $\rightarrow$ `teachers(teacher_id)` `CASCADE` | One professor instructs multiple courses; each course has one owner. |
+| Student Course Registration | **M:N** | `students` / `courses` | `enrollments` | `student_id` & `course_id` `CASCADE` | Resolved via associative table `enrollments` with `UNIQUE(student_id, course_id)`. |
+| Course Lecture Timetable | **1:N** | `courses` | `course_schedules`| `course_id` $\rightarrow$ `courses(id)` `CASCADE` | A course has multiple weekly timeslots (e.g. Mon 15:00, Wed 10:00). |
+| Scheduled Session Execution | **1:N** | `course_schedules`| `qr_sessions` | `schedule_id` $\rightarrow$ `course_schedules(id)` `SET NULL`| Live QR session bound to a planned lecture slot. |
+| Course Session Hosting | **1:N** | `courses` | `qr_sessions` | `course_id` $\rightarrow$ `courses(id)` `CASCADE` | A course holds multiple live class meetings over the semester. |
+| Session Attendance Records | **1:N** | `qr_sessions` | `attendance` | `qr_session_id` $\rightarrow$ `qr_sessions(id)` `CASCADE`| Class meeting contains one attendance record per attending student. |
+| Student Attendance Records | **1:N** | `students` | `attendance` | `student_id` $\rightarrow$ `students(student_id)` `CASCADE`| Student maintains an attendance history across courses. |
+| Immutable Audit Tracking | **1:N** | `attendance` | `attendance_audit_log`| `attendance_id` $\rightarrow$ `attendance(id)` | Every manual override is logged as an immutable historical record. |
+| Scan Attempt Fraud Evidence | **1:N** | `students` / `qr_sessions` | `scan_attempts` | `student_id` & `session_id` | Sliding-window rate limit and cryptographic replay attack evidence. |
 
 ---
 

@@ -44,6 +44,126 @@ The system prevents proxy attendance and screenshot reuse through:
 
 ---
 
+## 🏛️ System Architecture & Engineering Blueprint
+
+ScanIn implements a resilient, multi-tiered enterprise architecture separating presentation, security boundary enforcement, application controllers, cryptographic services, and connection-pooled relational storage.
+
+```mermaid
+flowchart TD
+    subgraph CLIENT_TIER["🖥️ Client Tier (Responsive Academic Web Portal)"]
+        direction TB
+        BrowserFaculty["Faculty Portal & Live QR<br>• Timetable & Planned Sessions<br>• Dynamic Projector Display<br>• Session Attendance & Audit Logs"]
+        BrowserStudent["Student Portal & Scanner<br>• In-Browser HTML5 Camera Scanner<br>• 6-Digit Numeric Fallback OTP<br>• Personal History & Warnings"]
+    end
+
+    subgraph SECURITY_TIER["🛡️ Network & Boundary Security Tier"]
+        direction TB
+        ReverseProxy["HTTPS / TLS 1.3 Termination<br>(Render Cloud Reverse Proxy)"]
+        SecurityFilter["SecurityFilter (Jakarta Filter Engine)<br>• Centralized RBAC (/teacher vs /student)<br>• Session Fixation & Hijack Protection<br>• CSRF Token & Safe Header Enforcement"]
+    end
+
+    subgraph CONTROLLER_TIER["⚙️ Controller Tier (Jakarta Servlets 6.0)"]
+        direction TB
+        AuthServlets["Portal & Auth Servlets<br>• LoginServlet<br>• TeacherDashboardServlet<br>• StudentDashboardServlet"]
+        CoreServlets["Attendance & Reporting Servlets<br>• QrGenerateServlet (7s Rotation Engine)<br>• QrScanServlet (Verification Pipeline)<br>• ReportServlet (CSV & Session Analytics)"]
+    end
+
+    subgraph SERVICE_TIER["🧠 Business & Cryptographic Services"]
+        direction TB
+        CryptoService["QrCodeUtil Engine<br>• HMAC-SHA256 Token Signing & Validation<br>• 7-Second Epoch Step Synchronization<br>• TOTP-Style 6-Digit Code Truncation"]
+        UtilityService["Utilities & Infrastructure<br>• PasswordUtil (BCrypt Salting & Hashing)<br>• DateTimeUtil (Canonical UTC to Asia/Kolkata IST)<br>• SessionUtil (Secure HTTP Session Management)"]
+    end
+
+    subgraph DAO_TIER["📦 Data Access Object Tier (Generic Dao Pattern)"]
+        direction TB
+        DAOs["Domain DAOs<br>• UserDao, TeacherDao, StudentDao<br>• CourseDao, CourseScheduleDao<br>• QrSessionDao, AttendanceDao<br>• AttendanceAuditLogDao, ScanAttemptDao"]
+    end
+
+    subgraph PERSISTENCE_TIER["🗄️ Persistence Tier (MySQL 8.0 InnoDB / TiDB Cloud)"]
+        direction TB
+        Pool["DBConnection Singleton<br>Apache Tomcat JDBC Connection Pool<br>(maxActive=20, testOnBorrow=true, validationQuery='SELECT 1')"]
+        Database[("attendance_db Relational Engine<br>• 10 Normalized 3NF Relational Tables<br>• ACID Transactions with InnoDB Engine<br>• Strict Foreign Keys & Unique Constraints")]
+    end
+
+    BrowserFaculty -->|"HTTPS Requests"| ReverseProxy
+    BrowserStudent -->|"HTTPS / Camera Scans"| ReverseProxy
+    ReverseProxy --> SecurityFilter
+    SecurityFilter --> AuthServlets
+    SecurityFilter --> CoreServlets
+    AuthServlets --> DAOs
+    CoreServlets --> CryptoService
+    CoreServlets --> DAOs
+    CryptoService -.->|"Signature & Verification"| CoreServlets
+    UtilityService -.->|"BCrypt & IST Format"| CoreServlets
+    DAOs --> Pool
+    Pool --> Database
+```
+
+---
+
+## 🔄 End-to-End System Flow Diagram
+
+The diagram below details the complete lifecycle from schedule creation and dynamic rotating QR generation to multi-step anti-proxy token verification, ACID attendance persistence, and automated session closure.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Faculty as 👨‍🏫 Faculty Member
+    participant FacultyUI as 🖥️ Faculty Dashboard
+    participant Server as ⚙️ ScanIn Controller
+    participant Crypto as 🔐 QrCodeUtil (Crypto)
+    participant DB as 🗄️ MySQL / TiDB Database
+    actor Student as 👨‍🎓 Student
+    participant StudentUI as 📱 Student Scanner
+
+    Note over Faculty, DB: Phase 1: Schedule-Linked Live Attendance Launch
+    Faculty->>FacultyUI: Selects planned timeslot and clicks "Start Now"
+    FacultyUI->>Server: POST /qr/display?courseId=1&scheduleId=101
+    Server->>DB: INSERT qr_sessions (bound to schedule_id, is_active=TRUE)
+    Server-->>FacultyUI: Renders Live QR Screen (7s Monotonic Timer Initialized)
+
+    Note over FacultyUI, Crypto: Phase 2: Autonomous 7-Second Dynamic Rotation Cycle
+    loop Every 7 Seconds
+        FacultyUI->>Server: GET /qr/active?sessionId=570001
+        Server->>Crypto: generateRotatingToken(sessionId, courseId)
+        Crypto->>Crypto: Compute step: timestamp / 7000ms
+        Crypto->>Crypto: Generate HMAC-SHA256 signature + 6-digit OTP
+        Crypto-->>Server: Signed Token + 6-Digit Fallback
+        Server-->>FacultyUI: JSON: {token, qrImageBase64, numericCode, remainingTime}
+        FacultyUI->>FacultyUI: Repaint DOM (SVG QR Code + OTP + 7s countdown)
+    end
+
+    Note over Student, DB: Phase 3: Real-Time Anti-Proxy Verification Pipeline
+    Student->>StudentUI: Points camera at live screen (or enters 6-digit code)
+    StudentUI->>Server: POST /qr/scan {sessionId, token / numericCode}
+    Server->>Crypto: validateToken(token, sessionId)
+    Crypto->>Crypto: 1. Parse 5-part token payload
+    Crypto->>Crypto: 2. Constant-time HMAC comparison (Anti-tamper)
+    Crypto->>Crypto: 3. Verify age <= 10s (Anti-screenshot)
+    Crypto-->>Server: TokenStatus: VALID
+    Server->>DB: Check scan_attempts for token_hash (Anti-replay)
+    Server->>DB: Check enrollments for student_id in course_id
+    Server->>DB: Check qr_sessions is_active = TRUE
+    Server->>DB: BEGIN TRANSACTION
+    Server->>DB: INSERT INTO attendance (status='PRESENT')
+    Note over Server, DB: UNIQUE(student_id, qr_session_id) triggers Error 1062 on duplicate attempt
+    Server->>DB: INSERT INTO scan_attempts (outcome='SUCCESS')
+    Server->>DB: COMMIT TRANSACTION
+    Server-->>StudentUI: 200 OK: "Attendance Recorded Successfully!"
+    StudentUI-->>Student: Renders Green Confirmation with Course Details
+
+    Note over Faculty, DB: Phase 4: Session Closure, Absentee Marking & Timetable Retirement
+    Faculty->>FacultyUI: Clicks "End Session & Mark Absentees"
+    FacultyUI->>Server: GET /qr/close?sessionId=570001
+    Server->>DB: UPDATE qr_sessions SET is_active=FALSE, closed_at=NOW()
+    Server->>DB: INSERT INTO attendance SELECT unmarked students AS 'ABSENT'
+    Server->>DB: UPDATE course_schedules SET is_conducted=TRUE WHERE id=101
+    Note over Server, DB: Timeslot retired from active dashboard; report metadata permanently preserved
+    Server-->>FacultyUI: Redirects to /teacher/dashboard?msg=session_closed
+```
+
+---
+
 ## 🏛️ Object-Oriented Architecture
 
 ```
