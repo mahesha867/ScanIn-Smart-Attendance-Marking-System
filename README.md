@@ -108,58 +108,58 @@ The diagram below details the complete lifecycle from schedule creation and dyna
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Faculty as 👨‍🏫 Faculty Member
-    participant FacultyUI as 🖥️ Faculty Dashboard
-    participant Server as ⚙️ ScanIn Controller
-    participant Crypto as 🔐 QrCodeUtil (Crypto)
-    participant DB as 🗄️ MySQL / TiDB Database
-    actor Student as 👨‍🎓 Student
-    participant StudentUI as 📱 Student Scanner
+    actor Faculty as Faculty Member
+    participant FacultyUI as Faculty Dashboard
+    participant Server as ScanIn Controller
+    participant Crypto as QrCodeUtil Crypto
+    participant DB as MySQL Database
+    actor Student as Student
+    participant StudentUI as Student Scanner
 
-    Note over Faculty, DB: Phase 1: Schedule-Linked Live Attendance Launch
-    Faculty->>FacultyUI: Selects planned timeslot and clicks "Start Now"
-    FacultyUI->>Server: POST /qr/display?courseId=1&scheduleId=101
-    Server->>DB: INSERT qr_sessions (bound to schedule_id, is_active=TRUE)
-    Server-->>FacultyUI: Renders Live QR Screen (7s Monotonic Timer Initialized)
+    Note over Faculty, DB: Phase 1 - Schedule-Linked Live Attendance Launch
+    Faculty->>FacultyUI: Selects planned timeslot and clicks Start Now
+    FacultyUI->>Server: POST /qr/display with courseId and scheduleId
+    Server->>DB: INSERT qr_sessions with schedule_id and is_active TRUE
+    Server-->>FacultyUI: Renders Live QR Screen and starts 7s monotonic timer
 
-    Note over FacultyUI, Crypto: Phase 2: Autonomous 7-Second Dynamic Rotation Cycle
+    Note over FacultyUI, Crypto: Phase 2 - Autonomous 7-Second Dynamic Rotation Cycle
     loop Every 7 Seconds
-        FacultyUI->>Server: GET /qr/active?sessionId=570001
-        Server->>Crypto: generateRotatingToken(sessionId, courseId)
-        Crypto->>Crypto: Compute step: timestamp / 7000ms
-        Crypto->>Crypto: Generate HMAC-SHA256 signature + 6-digit OTP
-        Crypto-->>Server: Signed Token + 6-Digit Fallback
-        Server-->>FacultyUI: JSON: {token, qrImageBase64, numericCode, remainingTime}
-        FacultyUI->>FacultyUI: Repaint DOM (SVG QR Code + OTP + 7s countdown)
+        FacultyUI->>Server: GET /qr/active for current sessionId
+        Server->>Crypto: generateRotatingToken for session
+        Crypto->>Crypto: Compute 7-second epoch time step
+        Crypto->>Crypto: Generate HMAC-SHA256 signature and 6-digit OTP
+        Crypto-->>Server: Signed Token and 6-Digit Fallback Code
+        Server-->>FacultyUI: Return token payload, base64 QR, and numeric code
+        FacultyUI->>FacultyUI: Update DOM with dynamic QR, OTP, and 7s countdown
     end
 
-    Note over Student, DB: Phase 3: Real-Time Anti-Proxy Verification Pipeline
-    Student->>StudentUI: Points camera at live screen (or enters 6-digit code)
-    StudentUI->>Server: POST /qr/scan {sessionId, token / numericCode}
-    Server->>Crypto: validateToken(token, sessionId)
+    Note over Student, DB: Phase 3 - Real-Time Anti-Proxy Verification Pipeline
+    Student->>StudentUI: Points camera at live screen or enters numeric code
+    StudentUI->>Server: POST /qr/scan with token or code
+    Server->>Crypto: validateToken against sessionId
     Crypto->>Crypto: 1. Parse 5-part token payload
-    Crypto->>Crypto: 2. Constant-time HMAC comparison (Anti-tamper)
-    Crypto->>Crypto: 3. Verify age <= 10s (Anti-screenshot)
-    Crypto-->>Server: TokenStatus: VALID
-    Server->>DB: Check scan_attempts for token_hash (Anti-replay)
-    Server->>DB: Check enrollments for student_id in course_id
-    Server->>DB: Check qr_sessions is_active = TRUE
+    Crypto->>Crypto: 2. Constant-time HMAC comparison
+    Crypto->>Crypto: 3. Verify token age is within 10s window
+    Crypto-->>Server: Token validation status VALID
+    Server->>DB: Check scan_attempts for token hash to prevent replay
+    Server->>DB: Verify student enrollment in course
+    Server->>DB: Confirm session is currently active
     Server->>DB: BEGIN TRANSACTION
-    Server->>DB: INSERT INTO attendance (status='PRESENT')
-    Note over Server, DB: UNIQUE(student_id, qr_session_id) triggers Error 1062 on duplicate attempt
-    Server->>DB: INSERT INTO scan_attempts (outcome='SUCCESS')
+    Server->>DB: INSERT INTO attendance with status PRESENT
+    Note over Server, DB: Composite unique index triggers Error 1062 on duplicate attempt
+    Server->>DB: INSERT INTO scan_attempts with outcome SUCCESS
     Server->>DB: COMMIT TRANSACTION
-    Server-->>StudentUI: 200 OK: "Attendance Recorded Successfully!"
-    StudentUI-->>Student: Renders Green Confirmation with Course Details
+    Server-->>StudentUI: 200 OK - Attendance Recorded Successfully
+    StudentUI-->>Student: Renders green confirmation screen
 
-    Note over Faculty, DB: Phase 4: Session Closure, Absentee Marking & Timetable Retirement
-    Faculty->>FacultyUI: Clicks "End Session & Mark Absentees"
-    FacultyUI->>Server: GET /qr/close?sessionId=570001
-    Server->>DB: UPDATE qr_sessions SET is_active=FALSE, closed_at=NOW()
-    Server->>DB: INSERT INTO attendance SELECT unmarked students AS 'ABSENT'
-    Server->>DB: UPDATE course_schedules SET is_conducted=TRUE WHERE id=101
-    Note over Server, DB: Timeslot retired from active dashboard; report metadata permanently preserved
-    Server-->>FacultyUI: Redirects to /teacher/dashboard?msg=session_closed
+    Note over Faculty, DB: Phase 4 - Session Closure, Absentee Marking and Retirement
+    Faculty->>FacultyUI: Clicks End Session and Mark Absentees
+    FacultyUI->>Server: GET /qr/close for sessionId
+    Server->>DB: UPDATE qr_sessions SET is_active FALSE, closed_at NOW
+    Server->>DB: INSERT INTO attendance for unmarked enrolled students as ABSENT
+    Server->>DB: UPDATE course_schedules SET is_conducted TRUE
+    Note over Server, DB: Timeslot retired from dashboard while historical reports remain intact
+    Server-->>FacultyUI: Redirects to faculty dashboard
 ```
 
 ---
